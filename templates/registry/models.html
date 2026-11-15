@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static eic %}
+{% block title %}Model comparison{% endblock %}
+{% block description %}Compare EfficientNet, MobileNetV2 and ResNet50 candidates and choose the active model.{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h1">Model comparison</h1>
+  <p class="subtitle">Candidate transfer-learning models trained on the same partitions (Objective 1). Select which one the application uses.</p>
+</div>
+
+<div class="card mb-6">
+  {% if not models %}
+    {% include "partials/empty.html" with title="No models registered" text="Upload a trained model below, or run python manage.py seed_demo to see examples." %}
+  {% else %}
+  <div class="table-scroll">
+    <table class="table min-760">
+      <caption class="sr-only">Candidate models</caption>
+      <thead><tr><th scope="col">Model</th><th scope="col">Val. accuracy</th><th scope="col">Macro F1</th><th scope="col">Test accuracy</th><th scope="col">Size</th><th scope="col">Avg inference</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+      <tbody>
+      {% for m in models %}
+        <tr>
+          <td><strong>{{ m.name }}</strong> <span class="muted">v{{ m.version }}</span>{% if not m.file %}<br><span class="muted xs">no model file</span>{% endif %}</td>
+          <td class="num">{{ m.val_accuracy|pct }}</td>
+          <td class="num">{{ m.val_macro_f1|fixed2 }}</td>
+          <td class="num">{{ m.test_accuracy|pct }}</td>
+          <td class="num">{% if m.size_mb is not None %}{{ m.size_mb }} MB{% else %}—{% endif %}</td>
+          <td class="num">{{ m.avg_inference_ms|ms }}</td>
+          <td>{% if m.is_active %}<span class="badge badge-active">Active</span>{% else %}
+            <button type="button" class="btn btn-outline btn-sm" data-activate="{% url 'model_activate' m.pk %}" data-name="{{ m.name }}" data-version="{{ m.version }}">Set active</button>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if models %}
+<div class="row mb-4">
+  <label for="chart-model" class="muted small">Show training curves for</label>
+  <select id="chart-model" class="field field-auto">
+    {% for m in models %}<option value="{{ m.pk }}" {% if chart_default and m.pk == chart_default.pk %}selected{% endif %}>{{ m.name }} v{{ m.version }}</option>{% endfor %}
+  </select>
+</div>
+<div class="grid grid-2 mb-6">
+  <div class="card"><h2 class="eyebrow">Training vs validation accuracy</h2><div class="chart mt-4"><canvas id="acc-chart" role="img" aria-label="Training vs validation accuracy"></canvas><div class="empty chart-empty" hidden><p class="empty-title">No training history</p><p class="muted small">This model has no per-epoch history recorded.</p></div></div></div>
+  <div class="card"><h2 class="eyebrow">Training vs validation loss</h2><div class="chart mt-4"><canvas id="loss-chart" role="img" aria-label="Training vs validation loss"></canvas><div class="empty chart-empty" hidden><p class="empty-title">No training history</p><p class="muted small">This model has no per-epoch history recorded.</p></div></div></div>
+</div>
+{{ charts|json_script:"chart-data" }}
+{% endif %}
+
+<div class="card row between">
+  <div><h2 class="eyebrow">Upload new model</h2><p class="muted xs mt-1">.h5 / .keras + class-label JSON, version, notes</p></div>
+  <button type="button" class="btn btn-primary" id="upload-open">Upload model</button>
+</div>
+
+<dialog id="activate-dialog" class="dialog" aria-labelledby="activate-title">
+  <form method="post" id="activate-form">
+    {% csrf_token %}
+    <h2 class="h2" id="activate-title">Set this model as active?</h2>
+    <p class="muted mt-2" id="activate-text"></p>
+    <div class="row end mt-5">
+      <button type="button" class="btn btn-outline" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Set active</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="upload-dialog" class="dialog" aria-labelledby="upload-title" {% if upload_open %}data-open{% endif %}>
+  <form method="post" action="{% url 'model_upload' %}" enctype="multipart/form-data" class="stack" novalidate>
+    {% csrf_token %}
+    <div><h2 class="h2" id="upload-title">Upload a trained model</h2><p class="muted small mt-1">It is added to the comparison table. Press Set active to use it for new classifications.</p></div>
+    {% for e in form.non_field_errors %}<p class="error" role="alert">{{ e }}</p>{% endfor %}
+    {% for field in form %}
+      <div>
+        <label for="{{ field.id_for_label }}" class="eyebrow">{{ field.label }}</label>
+        <div class="mt-2">{{ field }}</div>
+        {% for e in field.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+      </div>
+    {% endfor %}
+    <div class="row end">
+      <button type="button" class="btn btn-outline" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Upload</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script><script>EIC.initModels();</script>{% endblock %}

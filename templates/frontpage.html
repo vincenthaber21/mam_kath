@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}AI-assisted emergency image review{% endblock %}
+{% block description %}Explore how the Emergency Incident Classifier turns one incident photo into a confidence-scored category for human review.{% endblock %}
+{% block og_title %}Emergency Incident Classifier · From photo to informed review{% endblock %}
+{% block og_description %}Explore the workflow, five incident categories and human-verification process of this research prototype.{% endblock %}
+{% block body %}
+<header class="site-header">
+  <div class="site-container site-header-inner">
+    <a href="{% url 'home' %}" class="site-brand" aria-label="Emergency Incident Classifier home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z"/><path d="M8.5 12h2l1.2-2.5 2 5 1.2-2.5h.6"/></svg>
+      </span>
+      <span><strong>Emergency Incident</strong><span>Classifier</span></span>
+    </a>
+    <nav class="site-nav" aria-label="Front page">
+      <a href="#how-it-works">How it works</a>
+      <a href="#categories">Categories</a>
+      <a href="#responsible-use">Responsible use</a>
+    </nav>
+    <div class="site-actions">
+      <a href="{% url 'login' %}" class="btn btn-outline btn-sm">Sign in</a>
+      <a href="{% url 'classify' %}" class="btn btn-primary btn-sm"><span class="cta-full">Open classifier</span><span class="cta-short">Open</span><span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero site-container">
+    <div class="hero-copy">
+      <p class="hero-kicker"><span class="status-dot" aria-hidden="true"></span> Research prototype · Santa Maria, Ilocos Sur</p>
+      <h1>From incident photo<br>to <span>informed review.</span></h1>
+      <p class="hero-lead">A focused image-classification workspace that helps researchers organise emergency photos into five incident categories—with confidence scores and human verification at every step.</p>
+      <div class="hero-actions">
+        <a href="{% url 'classify' %}" class="btn btn-primary btn-lg">Try the classifier <span aria-hidden="true">→</span></a>
+        <a href="#how-it-works" class="btn btn-outline btn-lg">See how it works</a>
+      </div>
+      <ul class="hero-checks" aria-label="Upload requirements">
+        <li><span aria-hidden="true">✓</span> JPG or PNG</li>
+        <li><span aria-hidden="true">✓</span> Up to 10 MB</li>
+        <li><span aria-hidden="true">✓</span> One category per image</li>
+      </ul>
+    </div>
+
+    <div class="product-preview" aria-label="Illustrative classifier interface preview">
+      <div class="preview-topbar">
+        <div class="preview-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <span>Classification workspace</span>
+        <span class="preview-label">Interface example</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-heading">
+          <div><span class="preview-step">NEW CLASSIFICATION</span><h2>Incident image review</h2></div>
+          <span class="preview-model">Model ready</span>
+        </div>
+        <div class="preview-grid">
+          <div class="preview-upload">
+            <div class="preview-image" aria-hidden="true">
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="9" width="34" height="30" rx="4"/><circle cx="18" cy="19" r="3"/><path d="m10 35 10-10 7 7 5-5 6 6"/></svg>
+              <span>incident-photo.jpg</span>
+              <small>Image ready for analysis</small>
+            </div>
+            <div class="preview-file"><span>JPG</span><div><strong>incident-photo.jpg</strong><small>1.8 MB · 1600 × 1200</small></div><b aria-hidden="true">✓</b></div>
+          </div>
+          <div class="preview-result">
+            <span class="preview-step">ILLUSTRATIVE RESULT</span>
+            <div class="preview-result-title"><span>Predicted category</span><strong>Accident</strong></div>
+            <div class="preview-confidence"><strong>87.6<span>%</span></strong><span>confidence</span></div>
+            <div class="preview-score"><div><span>Accident</span><b>87.6%</b></div><div class="preview-track"><span style="width:87.6%"></span></div></div>
+            <div class="preview-score muted-score"><div><span>Fire</span><b>5.2%</b></div><div class="preview-track"><span style="width:5.2%"></span></div></div>
+            <div class="preview-score muted-score"><div><span>Disaster</span><b>3.1%</b></div><div class="preview-track"><span style="width:3.1%"></span></div></div>
+            <div class="preview-review"><span aria-hidden="true">✓</span><div><strong>Ready for human review</strong><small>Prediction is not a final decision</small></div></div>
+          </div>
+        </div>
+        <p class="preview-disclaimer">Example values only. This preview does not show a real model result.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="system-facts" aria-label="System summary">
+    <div class="site-container facts-grid">
+      <div><strong>05</strong><span>incident categories</span></div>
+      <div><strong>01</strong><span>prediction per image</span></div>
+      <div><strong>100%</strong><span>human verification required</span></div>
+      <div><strong>&lt;60%</strong><span>flagged as low confidence</span></div>
+    </div>
+  </section>
+
+  <section class="landing-section site-container" id="how-it-works">
+    <div class="section-heading">
+      <p class="eyebrow">A clear, reviewable workflow</p>
+      <h2>How the classifier works</h2>
+      <p>From upload to verified record, every stage remains visible to the researcher.</p>
+    </div>
+    <div class="workflow-grid">
+      <article class="workflow-card">
+        <div class="workflow-top"><span class="workflow-number">01</span><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 14v5h14v-5"/></svg></span></div>
+        <h3>Upload an incident photo</h3>
+        <p>Choose a JPG or PNG image, or capture one with a phone camera. Add an optional reference label when testing.</p>
+        <span class="workflow-note">One image · maximum 10 MB</span>
+      </article>
+      <article class="workflow-card">
+        <div class="workflow-top"><span class="workflow-number">02</span><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3M10 10h4v4h-4z"/></svg></span></div>
+        <h3>Review the model output</h3>
+        <p>The active model returns one predicted category, a confidence score, all five class scores and inference time.</p>
+        <span class="workflow-note">Scores below 60% are flagged</span>
+      </article>
+      <article class="workflow-card">
+        <div class="workflow-top"><span class="workflow-number">03</span><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5h10v16H5V5h4Z"/><path d="M9 3h6v4H9zM8 13l2 2 5-5"/></svg></span></div>
+        <h3>Verify and keep the record</h3>
+        <p>A reviewer confirms or corrects the prediction. The result is stored in History for filtering, export and evaluation.</p>
+        <span class="workflow-note">Human judgment stays in control</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="category-section" id="categories">
+    <div class="site-container landing-section">
+      <div class="section-heading section-heading-row">
+        <div><p class="eyebrow">Five focused classes</p><h2>One system. Five incident types.</h2></div>
+        <p>Each image receives exactly one label. The model does not assign severity or dispatch assistance.</p>
+      </div>
+      <div class="category-grid">
+        <article class="category-card"><span class="category-index">01</span><h3>Fire</h3><p>Visible flames, smoke and fire-related incident scenes.</p></article>
+        <article class="category-card"><span class="category-index">02</span><h3>Crime</h3><p>Images associated with criminal incidents or police response.</p></article>
+        <article class="category-card"><span class="category-index">03</span><h3>Medical emergency</h3><p>Medical incidents requiring urgent care or assistance.</p></article>
+        <article class="category-card"><span class="category-index">04</span><h3>Accident</h3><p>Road, vehicle and other accidental incident scenes.</p></article>
+        <article class="category-card"><span class="category-index">05</span><h3>Disaster</h3><p>Floods, storms, earthquakes and other disaster damage.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-section site-container" id="responsible-use">
+    <div class="responsibility-panel">
+      <div class="responsibility-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+      <div><p class="eyebrow">Designed for responsible research</p><h2>AI assistance, not emergency decision-making.</h2><p>Predictions are supplementary information and always require human verification. This prototype does not contact emergency services, notify agencies, detect locations, or assess incident severity.</p></div>
+      <a href="{% url 'classify' %}" class="btn btn-outline">Open research workspace <span aria-hidden="true">→</span></a>
+    </div>
+  </section>
+
+  <section class="site-container landing-cta">
+    <p class="eyebrow">Emergency Incident Classifier</p>
+    <h2>Explore the complete classification workflow.</h2>
+    <p>Upload a photo, inspect the prediction, verify the result and review the saved record.</p>
+    <a href="{% url 'classify' %}" class="btn btn-primary btn-lg">Start classifying <span aria-hidden="true">→</span></a>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-container footer-grid">
+    <div><a href="{% url 'home' %}" class="site-brand"><span class="brand-mark" aria-hidden="true">EIC</span><span><strong>Emergency Incident</strong><span>Classifier</span></span></a><p>A thesis prototype for MDRRMO Santa Maria, Ilocos Sur.</p></div>
+    <div><span class="footer-label">RESEARCH</span><p>DMMMSU MLUC<br>College of Information Technology</p></div>
+    <div><span class="footer-label">QUICK LINKS</span><a href="#how-it-works">How it works</a><a href="{% url 'login' %}">Researcher sign in</a></div>
+  </div>
+  <div class="site-container footer-bottom"><span>Emergency Incident Classifier · Research prototype</span><span>Human verification required</span></div>
+</footer>
+{% endblock %}

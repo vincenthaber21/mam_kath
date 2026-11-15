@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load static eic %}
+{% block title %}Dataset inventory{% endblock %}
+{% block description %}Images per category and train, validation and test split counts after cleaning.{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h1">Dataset inventory</h1>
+  <p class="subtitle">Class distribution and split counts after cleaning ({{ info.sources|default:"sources not set" }} — pending licence check).</p>
+</div>
+
+<div class="grid grid-5 mb-6">
+  <div class="card"><p class="eyebrow">Total images</p><p class="kpi">{{ totals.total|thousands }}</p></div>
+  <div class="card"><p class="eyebrow">Train</p><p class="kpi">{{ totals.train|thousands }}</p>{% if split_share.train is not None %}<p class="muted xs">{{ split_share.train }}%</p>{% endif %}</div>
+  <div class="card"><p class="eyebrow">Validation</p><p class="kpi">{{ totals.val|thousands }}</p>{% if split_share.val is not None %}<p class="muted xs">{{ split_share.val }}%</p>{% endif %}</div>
+  <div class="card"><p class="eyebrow">Test</p><p class="kpi">{{ totals.test|thousands }}</p>{% if split_share.test is not None %}<p class="muted xs">{{ split_share.test }}%</p>{% endif %}</div>
+  <div class="card"><p class="eyebrow">Removed (dupes / corrupt)</p><p class="kpi">{{ info.removed|thousands }}</p></div>
+</div>
+
+{% if not rows %}
+  <div class="card">{% include "partials/empty.html" with title="No dataset counts yet" text="Run python manage.py import_dataset_counts <dataset folder>." %}</div>
+{% else %}
+<div class="grid grid-dataset">
+  <div class="card">
+    <div class="table-scroll">
+      <table class="table min-480">
+        <caption class="sr-only">Images per category and split</caption>
+        <thead><tr><th scope="col">Category</th><th scope="col">Train</th><th scope="col">Val</th><th scope="col">Test</th><th scope="col">Total</th><th scope="col">Share</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr><td>{{ r.name }}</td><td class="num">{{ r.train|thousands }}</td><td class="num">{{ r.val|thousands }}</td><td class="num">{{ r.test|thousands }}</td><td class="num">{{ r.total|thousands }}</td><td class="num">{{ r.share|pct }}</td></tr>
+        {% endfor %}
+          <tr class="strong"><td>Total</td><td class="num">{{ totals.train|thousands }}</td><td class="num">{{ totals.val|thousands }}</td><td class="num">{{ totals.test|thousands }}</td><td class="num">{{ totals.total|thousands }}</td><td class="num">100%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <h2 class="eyebrow">Class distribution</h2>
+    <div class="chart mt-4"><canvas id="dataset-chart" role="img" aria-label="Bar chart of images per category"></canvas></div>
+  </div>
+</div>
+{{ chart|json_script:"dataset-data" }}
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script><script>EIC.initDataset();</script>{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load eic %}
+{% block title %}Classifier evaluation{% endblock %}
+{% block description %}Run the labelled test set and review accuracy, precision, recall, F1 and the confusion matrix.{% endblock %}
+{% block content %}
+<div class="page-header split">
+  <div>
+    <h1 class="h1">Classifier evaluation</h1>
+    <p class="subtitle">Run the held-out labeled test set through the application and compare predictions with reference labels (Objective 3).</p>
+  </div>
+  {% if report %}
+  <div class="row no-print">
+    <a href="{% url 'evaluation_csv' ev.pk %}" class="btn btn-outline">Export CSV</a>
+    <button type="button" class="btn btn-outline" onclick="window.print()">Save as PDF</button>
+  </div>
+  {% endif %}
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card mb-6 no-print" novalidate>
+  {% csrf_token %}
+  {% if not has_models %}
+    {% include "partials/empty.html" with title="No models registered" text="Upload a trained model on the Models page first." %}
+  {% else %}
+  <div class="eval-form">
+    <label class="dropzone dropzone-small" for="id_test_set" id="zip-zone" tabindex="0" aria-label="Upload the test set zip file">
+      <span class="dropzone-text" id="zip-text">
+        <span>Upload test set (.zip with one folder per category)</span>
+        <span class="muted small">fire/ · crime/ · medical_emergency/ · accident/ · disaster/</span>
+      </span>
+    </label>
+    <input type="file" name="test_set" id="id_test_set" accept=".zip,application/zip" class="sr-only">
+    <div class="eval-model">
+      <label for="id_model" class="eyebrow">Model</label>
+      <select name="model" id="id_model" class="field mt-2">
+        {% for value, name in form.fields.model.choices %}<option value="{{ value }}" {% if form.model.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" id="run-btn" {% if ev.status == "running" %}disabled{% endif %}>{% if ev.status == "running" %}Running…{% else %}Run evaluation{% endif %}</button>
+  </div>
+  <label class="check mt-3"><input type="checkbox" name="update_model_metrics" {% if form.update_model_metrics.value %}checked{% endif %}> {{ form.fields.update_model_metrics.label }}</label>
+  {% for e in form.test_set.errors %}<p class="error mt-2" role="alert">{{ e }}</p>{% endfor %}
+  {% for e in form.model.errors %}<p class="error mt-2" role="alert">{{ e }}</p>{% endfor %}
+  <p class="error mt-2" id="zip-error" role="alert" hidden></p>
+  {% endif %}
+
+  {% if ev %}
+  <div class="mt-5" id="progress" data-status-url="{% url 'evaluation_status' ev.pk %}" data-status="{{ ev.status }}">
+    <p class="muted small" id="progress-text">Progress: {{ ev.processed }} / {{ ev.total }} images{% if ev.model %} · {{ ev.model.name }} v{{ ev.model.version }}{% endif %}{% if ev.status == "done" %} · done{% elif ev.status == "failed" %} · failed{% endif %}</p>
+    <div class="track track-lg mt-2" role="progressbar" aria-label="Evaluation progress" aria-valuemin="0" aria-valuemax="{{ ev.total }}" aria-valuenow="{{ ev.processed }}">
+      <div class="fill fill-brand" id="progress-fill" style="width: {{ ev.progress_pct }}%"></div>
+    </div>
+  </div>
+  {% endif %}
+</form>
+
+{% if not ev %}
+  <div class="card">{% include "partials/empty.html" with title="No evaluation yet" text="Upload the labeled test set and press Run evaluation. Results stay here after you reload." %}</div>
+{% elif ev.status == "running" %}
+  <div class="card">{% include "partials/empty.html" with title="Evaluating the test set…" text="Metrics appear when all images are processed. This page updates by itself." %}</div>
+{% elif ev.status == "failed" %}
+  <div class="card"><h2 class="eyebrow">Evaluation failed</h2><p class="big-error mt-2">{{ ev.error|default:"Unknown error" }}</p></div>
+{% endif %}
+
+{% if report %}
+<div class="print-header"><h1 class="h1">Emergency Incident Classifier — Evaluation report</h1>
+  <p class="muted small">Evaluation #{{ ev.pk }} · {{ ev.model.name }} v{{ ev.model.version }} · {{ ev.test_set_name }} · {{ ev.finished_at|date:"M j, Y, g:i A" }}</p></div>
+{% if ev.demo %}<div class="notice mb-6" role="note"><strong class="block">Simulated results.</strong> This evaluation used demo predictions because the model has no trained file. Do not report these numbers.</div>{% endif %}
+<div class="grid grid-4 mb-6">
+  <div class="card"><p class="eyebrow">Accuracy</p><p class="kpi">{{ report.accuracy|pct }}</p><p class="muted xs">held-out test set</p></div>
+  <div class="card"><p class="eyebrow">Macro F1</p><p class="kpi">{{ report.macro.f1|fixed2 }}</p><p class="muted xs">{{ report.labels|length }} classes</p></div>
+  <div class="card"><p class="eyebrow">Mean inference</p><p class="kpi">{{ ev.inference_ms.mean|ms }}</p><p class="muted xs">median {{ ev.inference_ms.median|floatformat:0 }} · min {{ ev.inference_ms.min|floatformat:0 }} · max {{ ev.inference_ms.max|floatformat:0 }}</p></div>
+  <div class="card"><p class="eyebrow">Failed attempts</p><p class="kpi">{{ ev.failed }}</p><p class="muted xs">counted separately</p></div>
+</div>
+
+<div class="grid grid-2 mb-6">
+  <div class="card">
+    <h2 class="eyebrow">Confusion matrix (rows = actual, columns = predicted)</h2>
+    <div class="table-scroll mt-4">
+      <table class="table matrix min-380">
+        <caption class="sr-only">Confusion matrix, rows are actual classes and columns are predicted classes</caption>
+        <thead><tr><th scope="col"><span class="sr-only">Actual</span></th>{% for l in report.labels %}<th scope="col" title="{{ l.name }}">{{ l.short }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in report.matrix %}
+          <tr><th scope="row" title="{{ row.name }}">{{ row.short }}</th>
+          {% for cell in row.cells %}<td class="cell{% if cell.diag %} diag{% endif %}" style="--a: {{ cell.alpha }}">{{ cell.value }}</td>{% endfor %}</tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted xs mt-2">{{ report.classified }} images classified · darker = more images</p>
+  </div>
+  <div class="card">
+    <h2 class="eyebrow">Per-class metrics</h2>
+    <div class="table-scroll mt-4">
+      <table class="table min-380">
+        <caption class="sr-only">Precision, recall, F1 and support per class</caption>
+        <thead><tr><th scope="col">Class</th><th scope="col">Precision</th><th scope="col">Recall</th><th scope="col">F1</th><th scope="col">Support</th></tr></thead>
+        <tbody>
+        {% for c in report.per_class %}
+          <tr><td>{{ c.label|label_name }}</td><td class="num">{{ c.precision|fixed2 }}</td><td class="num">{{ c.recall|fixed2 }}</td><td class="num">{{ c.f1|fixed2 }}</td><td class="num">{{ c.support }}</td></tr>
+        {% endfor %}
+          <tr class="strong"><td>Macro avg</td><td class="num">{{ report.macro.precision|fixed2 }}</td><td class="num">{{ report.macro.recall|fixed2 }}</td><td class="num">{{ report.macro.f1|fixed2 }}</td><td class="num">{{ report.classified }}</td></tr>
+          <tr class="strong"><td>Weighted avg</td><td class="num">{{ report.weighted.precision|fixed2 }}</td><td class="num">{{ report.weighted.recall|fixed2 }}</td><td class="num">{{ report.weighted.f1|fixed2 }}</td><td class="num">{{ report.classified }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <h2 class="eyebrow">Misclassified examples</h2>
+  {% if report.misclassified %}
+  <div class="gallery mt-4">
+    {% for m in report.misclassified %}
+      <figure class="gallery-item">
+        <img src="{{ m.image.url }}" alt="Actual {{ m.actual|label_name }}, predicted {{ m.predicted|label_name }}" loading="lazy">
+        <figcaption class="xs"><span class="muted">Actual</span> {{ m.actual|label_name }}<br><span class="muted">Predicted</span> {{ m.predicted|label_name }} · {{ m.confidence|pct:0 }}</figcaption>
+      </figure>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="mt-4">{% include "partials/empty.html" with title="No misclassified images" %}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if recent|length > 1 %}
+<div class="card no-print">
+  <h2 class="eyebrow">Previous evaluations</h2>
+  <ul class="list mt-3">
+    {% for r in recent %}
+      <li><a href="?id={{ r.pk }}" {% if ev and r.pk == ev.pk %}aria-current="true" class="strong"{% endif %}>#{{ r.pk }} · {{ r.model.name|default:"(deleted model)" }} · {{ r.created_at|date:"M j, g:i A" }}</a>
+        <span class="muted small">— {{ r.get_status_display }}{% if r.accuracy is not None %} · {{ r.accuracy|pct }}{% endif %}{% if r.demo %} · demo{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>EIC.initEvaluation();</script>{% endblock %}

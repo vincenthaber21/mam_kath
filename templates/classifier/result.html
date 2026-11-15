@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load eic %}
+{% block title %}Classification result {{ rec.record_no }}{% endblock %}
+{% block description %}Predicted category, confidence, class scores and reviewer verification.{% endblock %}
+{% block content %}
+<div class="page-header split">
+  <div class="row">
+    <a href="{% url 'history' %}" class="back-link">← Back</a>
+    <h1 class="h1">Classification result</h1>
+  </div>
+  <p class="muted small">Record {{ rec.record_no }} · {{ rec.created_at|date:"M j, Y, g:i A" }}</p>
+</div>
+
+<div class="grid grid-2">
+  <div class="card fit">
+    {% if rec.image %}
+      <img src="{{ rec.image.url }}" alt="Submitted image {{ rec.filename }}" class="result-image">
+    {% else %}
+      <div class="empty tall"><p class="muted small">No image stored</p></div>
+    {% endif %}
+    <p class="muted small mt-2">{{ rec.filename }}{% if rec.width and rec.height %} · {{ rec.width }}×{{ rec.height }} px{% endif %}{% if rec.size_kb is not None %} · {{ rec.size_kb }} KB{% endif %}</p>
+  </div>
+
+  <div class="stack">
+    {% if rec.failed %}
+      <div class="card">
+        <h2 class="eyebrow">Classification failed</h2>
+        <p class="big-error mt-2">{{ rec.error|default:"Unknown error" }}</p>
+        <p class="muted small mt-1">This attempt is logged as failed and counted separately in the evaluation.</p>
+      </div>
+    {% else %}
+      <div class="card">
+        <h2 class="eyebrow">Predicted category</h2>
+        <p class="prediction">{{ rec.predicted_label|label_name }}</p>
+        <div class="stats mt-4">
+          <div><p class="eyebrow">Confidence</p><p class="stat">{{ rec.confidence|pct }}</p></div>
+          <div><p class="eyebrow">Inference time</p><p class="stat">{{ rec.inference_ms|ms }}</p></div>
+          <div><p class="eyebrow">Model</p><p class="stat">{% if rec.demo %}Demo{% else %}{{ rec.model.name|default:"—" }}{% endif %}</p></div>
+        </div>
+        {% if rec.reference_label %}
+          <p class="muted small mt-4">Reference label: <strong class="fg">{{ rec.reference_label|label_name }}</strong>
+            {% if rec.is_match %}<strong class="success">· match</strong>{% else %}<strong class="danger">· mismatch</strong>{% endif %}</p>
+        {% endif %}
+        {% if rec.demo %}<p class="muted small mt-2">Simulated prediction — no trained model file is active.</p>{% endif %}
+      </div>
+      <div class="card">
+        <h2 class="eyebrow">All class scores</h2>
+        <div class="stack mt-4">
+          {% for name, value in scores %}
+          <div>
+            <div class="bar-head"><span>{{ name }}</span><span class="num">{{ value|pct }}</span></div>
+            <div class="track" role="meter" aria-label="{{ name }} score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ value|width_pct }}">
+              <div class="fill{% if forloop.first %} fill-brand{% endif %}" style="width: {{ value|width_pct }}%"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="notice" role="note">
+      {% if rec.low_confidence %}<strong class="block">Low confidence — verify this image manually (below {{ LOW_CONFIDENCE_PCT }}%).</strong>{% endif %}
+      Prediction requires human verification.
+    </div>
+
+    <form method="post" class="card" novalidate>
+      {% csrf_token %}
+      <h2 class="eyebrow"><label for="verification">Reviewer verification</label></h2>
+      <select name="verification" id="verification" class="field mt-3">
+        {% for value, name in form.fields.verification.choices %}
+          <option value="{{ value }}" {% if form.verification.value == value %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      <div class="mt-3" id="actual-wrap" {% if form.verification.value != "incorrect" %}hidden{% endif %}>
+        <label for="actual" class="muted small">Actual category</label>
+        <select name="actual_label" id="actual" class="field mt-1">
+          <option value="">Select the actual category</option>
+          {% for value, name in other_labels %}<option value="{{ value }}" {% if form.actual_label.value == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% for e in form.actual_label.errors %}<p class="error mt-2" role="alert">{{ e }}</p>{% endfor %}
+      {% for e in form.verification.errors %}<p class="error mt-2" role="alert">{{ e }}</p>{% endfor %}
+      <div class="row mt-4">
+        <button type="submit" class="btn btn-primary">Save to log</button>
+        <a href="{% url 'classify' %}" class="btn btn-outline">Classify another</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>EIC.initVerification();</script>{% endblock %}

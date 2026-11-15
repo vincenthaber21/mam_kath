@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Classify an incident image{% endblock %}
+{% block description %}Upload or capture one emergency photo and get a predicted category with a confidence score.{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h1">Classify an incident image</h1>
+  <p class="subtitle">Upload or capture one photo. The model returns a single predicted category and confidence score.</p>
+</div>
+
+<div class="grid grid-3">
+  <form method="post" enctype="multipart/form-data" class="card span-2" id="classify-form" novalidate>
+    {% csrf_token %}
+    <label class="dropzone" id="dropzone" for="image-input" tabindex="0" aria-label="Drop an image here or press to choose a file">
+      <img id="preview" alt="Selected image preview" hidden>
+      <span class="dropzone-text" id="dropzone-text">
+        <span class="hide-sm">Drag &amp; drop an image here</span><span class="show-sm">Tap to choose a photo</span>
+        <span class="muted small">JPG or PNG · max 10 MB</span>
+      </span>
+    </label>
+    <input type="file" name="image" id="image-input" accept="image/jpeg,image/png" class="sr-only">
+    <p class="muted small mt-2" id="file-info" hidden></p>
+    <p class="error mt-2" id="file-error" role="alert" {% if not error %}hidden{% endif %}>{{ error|default:"" }}</p>
+
+    <div class="row mt-4">
+      <div class="row-buttons">
+        <button type="button" class="btn btn-outline" id="gallery-btn"><span class="show-sm">Gallery</span><span class="hide-sm">Choose file</span></button>
+        <button type="button" class="btn btn-outline" id="camera-btn"><span class="show-sm">Camera</span><span class="hide-sm">Use camera</span></button>
+      </div>
+      <button type="submit" class="btn btn-primary push-right" id="classify-btn">Classify image</button>
+    </div>
+
+    <div class="row mt-4">
+      <label for="reference" class="muted small">Optional for testing: reference label</label>
+      <select name="reference_label" id="reference" class="field field-auto">
+        <option value="">— none —</option>
+        {% for value, name in labels %}<option value="{{ value }}" {% if value == reference %}selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="card fit">
+    <h2 class="eyebrow">Categories</h2>
+    <div class="chips mt-3">{% for value, name in labels %}<span class="chip">{{ name }}</span>{% endfor %}</div>
+    <h2 class="eyebrow mt-7">Active model</h2>
+    <p class="mt-2">{% if active %}{{ active.name }} · v{{ active.version }}{% if not active.file %} <span class="muted small">(no model file{% if DEMO_PREDICTIONS %}, demo predictions{% endif %})</span>{% endif %}{% else %}No active model — set one on the <a href="{% url 'models' %}">Models page</a>.{% endif %}</p>
+    <div class="notice mt-4" role="note">Predictions are supplementary information and require human verification. This tool does not dispatch or notify agencies.</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>EIC.initClassify();</script>{% endblock %}

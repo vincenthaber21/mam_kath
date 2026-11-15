@@ -1,0 +1,12 @@
+Django>=5.0,<7.0
+pillow>=10.0
+numpy>=1.26
+scikit-learn>=1.4
+python-dotenv>=1.0
+whitenoise>=6.6
+dj-database-url>=2.1
+gunicorn>=22.0
+psycopg2-binary>=2.9
+# The AI model runtime. Comment it out if you only want to try the website in demo mode.
+tensorflow-cpu>=2.15; platform_system != "Darwin"
+tensorflow>=2.15; platform_system == "Darwin"

@@ -1,0 +1,7 @@
+<nav aria-label="Main" class="nav">
+  <a href="{% url 'classify' %}" class="nav-link{% if nav == 'classify' %} active" aria-current="page{% endif %}">Classify</a>
+  <a href="{% url 'history' %}" class="nav-link{% if nav == 'history' %} active" aria-current="page{% endif %}">History</a>
+  <a href="{% url 'evaluation' %}" class="nav-link{% if nav == 'evaluation' %} active" aria-current="page{% endif %}">Evaluation</a>
+  <a href="{% url 'models' %}" class="nav-link{% if nav == 'models' %} active" aria-current="page{% endif %}">Models</a>
+  <a href="{% url 'dataset' %}" class="nav-link{% if nav == 'dataset' %} active" aria-current="page{% endif %}">Dataset</a>
+</nav>

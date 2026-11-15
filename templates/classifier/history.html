@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load eic %}
+{% block title %}Classification log{% endblock %}
+{% block description %}Every submission with prediction, confidence, reference label and processing time.{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h1">Classification log</h1>
+  <p class="subtitle">Every submission with prediction, confidence, reference label and processing time (Objective 2 records).</p>
+</div>
+
+<form method="get" class="card mb-6 filters" id="filters">
+  <div>
+    <label for="search" class="eyebrow">Search</label>
+    <input id="search" name="search" class="field mt-2" placeholder="Record # or filename" value="{{ filters.search }}">
+  </div>
+  <div>
+    <label for="predicted" class="eyebrow">Predicted</label>
+    <select id="predicted" name="predicted" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      {% for value, name in labels %}<option value="{{ value }}" {% if filters.predicted == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="status" class="eyebrow">Status</label>
+    <select id="status" name="status" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      <option value="success" {% if filters.status == "success" %}selected{% endif %}>Success</option>
+      <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
+    </select>
+  </div>
+  <div>
+    <label for="date" class="eyebrow">Date</label>
+    <input id="date" name="date" type="date" class="field mt-2" value="{{ filters.date }}" data-autosubmit>
+  </div>
+  <div class="filters-actions">
+    <noscript><button type="submit" class="btn btn-outline">Apply</button></noscript>
+    <a class="btn btn-outline" href="{% url 'history_export' %}{% if query %}?{{ query }}{% endif %}">Export CSV</a>
+  </div>
+</form>
+
+<div class="card">
+  {% if not page.object_list %}
+    {% include "partials/empty.html" with title="No classifications match these filters" text="Clear a filter, or classify a new image from the Classify page." %}
+  {% else %}
+  <div class="table-scroll">
+    <table class="table min-820">
+      <caption class="sr-only">Classification log</caption>
+      <thead><tr>
+        <th scope="col">Image</th><th scope="col">Record</th><th scope="col">Predicted</th><th scope="col">Confidence</th>
+        <th scope="col">Reference</th><th scope="col">Match</th><th scope="col">Time</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+      {% for c in page.object_list %}
+        <tr class="row-link" data-href="{% url 'result' c.pk %}" tabindex="0" aria-label="Open record {{ c.record_no }}">
+          <td>{% if c.image %}<img src="{{ c.image.url }}" alt="" loading="lazy" class="thumb">{% else %}<div class="thumb hatch" aria-hidden="true"></div>{% endif %}</td>
+          <td class="num"><a href="{% url 'result' c.pk %}">{{ c.record_no }}</a></td>
+          <td>{% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% else %}—{% endif %}</td>
+          <td class="num">{{ c.confidence|pct }}</td>
+          <td>{{ c.reference_label|label_name }}</td>
+          <td>{% if not c.has_match %}<span aria-label="No reference">—</span>{% elif c.is_match %}<span class="success" aria-label="Match">✓</span>{% else %}<span class="danger" aria-label="Mismatch">✕</span>{% endif %}</td>
+          <td class="num">{{ c.inference_ms|ms }}</td>
+          <td>{% if c.failed %}<span class="danger">Failed: {{ c.error|default:"error"|truncatechars:48 }}</span>{% else %}Success{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <div class="pager mt-3">
+    <span class="muted small">Showing {% if page.paginator.count %}{{ page.start_index }}–{{ page.end_index }}{% else %}0–0{% endif %} of {{ page.paginator.count }}</span>
+    <div class="row">
+      {% if page.has_previous %}<a class="btn btn-outline btn-sm" href="?{% if query %}{{ query }}&{% endif %}page={{ page.previous_page_number }}">Previous</a>{% else %}<span class="btn btn-outline btn-sm disabled" aria-disabled="true">Previous</span>{% endif %}
+      <span class="muted small">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a class="btn btn-outline btn-sm" href="?{% if query %}{{ query }}&{% endif %}page={{ page.next_page_number }}">Next</a>{% else %}<span class="btn btn-outline btn-sm disabled" aria-disabled="true">Next</span>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>EIC.initHistory();</script>{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Researcher sign in{% endblock %}
+{% block description %}Sign in to the Emergency Incident Classifier research workspace.{% endblock %}
+{% block body %}
+<main class="login-layout">
+  <section class="login-intro">
+    <a href="{% url 'home' %}" class="site-brand" aria-label="Back to front page">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z"/><path d="M8.5 12h2l1.2-2.5 2 5 1.2-2.5h.6"/></svg></span>
+      <span><strong>Emergency Incident</strong><span>Classifier</span></span>
+    </a>
+    <div class="login-intro-copy">
+      <p class="hero-kicker"><span class="status-dot" aria-hidden="true"></span> Research workspace</p>
+      <h1>Evidence for review.<br><span>Not automated response.</span></h1>
+      <p>Classify incident photos, examine confidence scores and keep a verified research record.</p>
+      <ul><li>Five focused incident categories</li><li>Transparent scores and inference records</li><li>Reviewer confirmation before results are saved</li></ul>
+    </div>
+    <p class="login-intro-foot">MDRRMO · Santa Maria, Ilocos Sur<br>DMMMSU MLUC College of Information Technology</p>
+  </section>
+  <section class="login-form-side">
+    <a href="{% url 'home' %}" class="login-back">← Back to front page</a>
+    <div class="login-card">
+      <p class="eyebrow">Authorised access</p>
+      <h2>Welcome back</h2>
+      <p class="muted mt-2">Sign in to continue to the classification workspace.</p>
+      {% if form.non_field_errors %}<p class="error mt-4" role="alert">{{ form.non_field_errors.0 }}</p>{% endif %}
+      <form method="post" class="stack mt-6" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div>
+          <label for="{{ form.username.id_for_label }}" class="form-label">Email address</label>
+          {{ form.username }}
+          {% for e in form.username.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+        </div>
+        <div>
+          <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+          {{ form.password }}
+          {% for e in form.password.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Sign in to workspace <span aria-hidden="true">→</span></button>
+      </form>
+      <div class="login-help"><strong>Need an account?</strong><p>Accounts are created by the system administrator. Contact your thesis administrator for access.</p></div>
+      <p class="login-security"><span aria-hidden="true">✓</span> Researcher and reviewer access only</p>
+    </div>
+  </section>
+</main>
+{% endblock %}
