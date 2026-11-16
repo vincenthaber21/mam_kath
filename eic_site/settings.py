@@ -26,8 +26,14 @@ def env_list(name, default=""):
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-insecure-key-change-me")
 DEBUG = env_bool("DEBUG", True)
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
-CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+ALLOWED_HOSTS = env_list(
+    "ALLOWED_HOSTS",
+    "localhost,127.0.0.1,bb6cjv85-8000.asse.devtunnels.ms",
+)
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "https://bb6cjv85-8000.asse.devtunnels.ms",
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -38,12 +44,14 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "accounts",
     "registry",
-    "classifier",
+    "classifier.apps.ClassifierConfig",
     "evaluation",
+    "api.apps.ApiConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "api.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -52,6 +60,10 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Mobile / Expo clients. Native apps usually send no Origin; Expo web / browsers do.
+CORS_ALLOW_ALL = env_bool("CORS_ALLOW_ALL", DEBUG)
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
 
 ROOT_URLCONF = "eic_site.urls"
 
@@ -127,6 +139,8 @@ MAX_TEST_SET_MB = int(os.environ.get("MAX_TEST_SET_MB", "500"))
 EIC_DEMO_MODE = env_bool("EIC_DEMO_MODE", False)
 # Run evaluations in the request instead of a background thread (used by tests).
 EVALUATION_SYNC = env_bool("EVALUATION_SYNC", False)
+# Run Models-page training in the request instead of a background thread (used by tests).
+TRAINING_SYNC = env_bool("TRAINING_SYNC", False)
 
 # Large evaluation zips are streamed to disk instead of memory.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024

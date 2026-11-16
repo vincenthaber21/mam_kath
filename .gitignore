@@ -6,3 +6,10 @@ media/
 staticfiles/
 .venv/
 venv/
+raw_data/
+dataset/
+trained_models/
+trained_models_train.log
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/

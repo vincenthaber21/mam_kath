@@ -1,12 +1,17 @@
 import json
+from pathlib import Path
 
 from django import forms
+from django.conf import settings
 
 from classifier.labels import LABELS
 
 from .models import MLModel
+from .training import ALL_ARCHS, ARCHS
 
 MAX_MODEL_MB = 500
+
+ARCH_CHOICES = [(k, ARCHS[k][0]) for k in ALL_ARCHS]
 
 
 class ModelUploadForm(forms.ModelForm):
@@ -65,3 +70,54 @@ class ModelUploadForm(forms.ModelForm):
         if commit:
             obj.save()
         return obj
+
+
+class TrainModelsForm(forms.Form):
+    archs = forms.MultipleChoiceField(
+        label="Architectures",
+        choices=ARCH_CHOICES,
+        initial=list(ALL_ARCHS),
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Train every selected model in one run, then activate the best by validation macro F1.",
+    )
+    dataset_path = forms.CharField(
+        label="Dataset folder",
+        initial="dataset",
+        widget=forms.TextInput(attrs={"class": "field"}),
+        help_text="Folder with train/, val/ and test/ sub-folders (relative to the project root, or absolute).",
+    )
+    epochs = forms.IntegerField(
+        label="Head-training epochs",
+        initial=10,
+        min_value=1,
+        max_value=100,
+        widget=forms.NumberInput(attrs={"class": "field"}),
+    )
+    fine_tune_epochs = forms.IntegerField(
+        label="Fine-tune epochs",
+        initial=10,
+        min_value=0,
+        max_value=100,
+        widget=forms.NumberInput(attrs={"class": "field"}),
+    )
+    model_version = forms.CharField(
+        label="Version tag",
+        initial="1.0",
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "field"}),
+    )
+    activate_best = forms.BooleanField(
+        label="Activate the best model when finished",
+        required=False,
+        initial=True,
+    )
+
+    def clean_dataset_path(self):
+        raw = self.cleaned_data["dataset_path"].strip()
+        path = Path(raw)
+        if not path.is_absolute():
+            path = Path(settings.BASE_DIR) / path
+        for split in ("train", "val"):
+            if not (path / split).is_dir():
+                raise forms.ValidationError(f"Missing folder: {path / split}")
+        return str(path)

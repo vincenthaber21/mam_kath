@@ -18,7 +18,16 @@
     {% else %}
       <div class="empty tall"><p class="muted small">No image stored</p></div>
     {% endif %}
-    <p class="muted small mt-2">{{ rec.filename }}{% if rec.width and rec.height %} · {{ rec.width }}×{{ rec.height }} px{% endif %}{% if rec.size_kb is not None %} · {{ rec.size_kb }} KB{% endif %}</p>
+    <p class="muted small mt-2">{{ rec.filename }}{% if rec.width and rec.height %} · {{ rec.width }}×{{ rec.height }} px{% endif %}{% if rec.size_kb is not None %} · {{ rec.size_kb }} KB{% endif %}{% if rec.source %} · via {{ rec.source }}{% endif %}</p>
+    {% if rec.notes or rec.location_text or rec.latitude is not None %}
+    <div class="notice mt-3" role="note">
+      {% if rec.location_text %}<p><strong class="fg">Location:</strong> {{ rec.location_text }}</p>{% endif %}
+      {% if rec.latitude is not None and rec.longitude is not None %}
+        <p class="muted small{% if rec.location_text %} mt-1{% endif %}">GPS {{ rec.latitude|floatformat:5 }}, {{ rec.longitude|floatformat:5 }}</p>
+      {% endif %}
+      {% if rec.notes %}<p class="{% if rec.location_text or rec.latitude is not None %}mt-2{% endif %}"><strong class="fg">Notes:</strong> {{ rec.notes }}</p>{% endif %}
+    </div>
+    {% endif %}
   </div>
 
   <div class="stack">
@@ -35,14 +44,34 @@
         <div class="stats mt-4">
           <div><p class="eyebrow">Confidence</p><p class="stat">{{ rec.confidence|pct }}</p></div>
           <div><p class="eyebrow">Inference time</p><p class="stat">{{ rec.inference_ms|ms }}</p></div>
-          <div><p class="eyebrow">Model</p><p class="stat">{% if rec.demo %}Demo{% else %}{{ rec.model.name|default:"—" }}{% endif %}</p></div>
+          <div><p class="eyebrow">{% if rec.votes %}Deciding model{% else %}Model{% endif %}</p><p class="stat">{% if rec.demo %}Demo{% else %}{{ rec.model.name|default:"—" }}{% endif %}</p></div>
         </div>
+        {% if rec.selection_mode %}<p class="muted small mt-3">Selection: {% if rec.votes %}voting across {{ rec.votes|length }} models{% elif rec.selection_mode == "auto" %}automatic (highest validation accuracy){% else %}manual{% endif %}</p>{% endif %}
         {% if rec.reference_label %}
           <p class="muted small mt-4">Reference label: <strong class="fg">{{ rec.reference_label|label_name }}</strong>
             {% if rec.is_match %}<strong class="success">· match</strong>{% else %}<strong class="danger">· mismatch</strong>{% endif %}</p>
         {% endif %}
         {% if rec.demo %}<p class="muted small mt-2">Simulated prediction — no trained model file is active.</p>{% endif %}
       </div>
+      {% if rec.votes %}
+      <div class="card">
+        <h2 class="eyebrow">Model votes</h2>
+        <p class="muted xs mt-1">Majority label wins; on a tie the most confident model decides. Scores below are from the deciding model.</p>
+        <table class="votes mt-3">
+          <thead><tr><th scope="col">Model</th><th scope="col">Vote</th><th scope="col" class="num">Confidence</th><th scope="col" class="num">Val. acc.</th></tr></thead>
+          <tbody>
+          {% for v in rec.votes %}
+            <tr>
+              <td>{{ v.model }}{% if v.deciding %} <span class="badge badge-active">Deciding</span>{% endif %}</td>
+              <td>{% if v.label == rec.predicted_label %}<strong class="fg">{{ v.label|label_name }}</strong>{% else %}{{ v.label|label_name }}{% endif %}</td>
+              <td class="num">{{ v.confidence|pct }}</td>
+              <td class="num">{{ v.val_accuracy|pct }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
       <div class="card">
         <h2 class="eyebrow">All class scores</h2>
         <div class="stack mt-4">

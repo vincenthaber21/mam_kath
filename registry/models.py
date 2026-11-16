@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models, transaction
+from django.urls import reverse
 
 from classifier.labels import LABEL_CHOICES
 
@@ -86,3 +88,65 @@ class DatasetInfo(models.Model):
     def get(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class SelectionSetting(models.Model):
+    """Single row: how the Classify page chooses which trained model(s) to use."""
+
+    MODES = [
+        ("auto", "Automatic — highest validation accuracy"),
+        ("voting", "Voting — all trained models vote"),
+        ("manual", "Manual — the model you set active"),
+    ]
+
+    mode = models.CharField(max_length=10, choices=MODES, default="auto")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "model selection setting"
+
+    def __str__(self):
+        return self.get_mode_display()
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class TrainingRun(models.Model):
+    """Background job that trains one or more architectures and registers them."""
+
+    STATUS = [("pending", "Pending"), ("running", "Running"), ("done", "Done"), ("failed", "Failed")]
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    status = models.CharField(max_length=10, choices=STATUS, default="pending")
+    archs = models.JSONField(default=list, help_text="Architecture keys being trained")
+    dataset_path = models.CharField(max_length=500, default="dataset")
+    epochs = models.PositiveIntegerField(default=10)
+    fine_tune_epochs = models.PositiveIntegerField(default=10)
+    model_version = models.CharField(max_length=20, default="1.0")
+    activate_best = models.BooleanField(default=True)
+    processed = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    current_arch = models.CharField(max_length=40, blank=True)
+    message = models.CharField(max_length=255, blank=True)
+    model_ids = models.JSONField(default=list, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"TrainingRun #{self.pk} ({self.status})"
+
+    def get_absolute_url(self):
+        return reverse("models") + f"?run={self.pk}"
+
+    @property
+    def progress_pct(self):
+        return round(self.processed / self.total * 100, 1) if self.total else 0

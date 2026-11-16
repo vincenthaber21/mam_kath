@@ -205,20 +205,72 @@
 
     var actDialog = document.getElementById("activate-dialog");
     var actForm = document.getElementById("activate-form");
-    wireDialog(actDialog);
-    document.querySelectorAll("[data-activate]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        actForm.action = btn.dataset.activate;
-        document.getElementById("activate-title").textContent = "Set " + btn.dataset.name + " as the active model?";
-        document.getElementById("activate-text").textContent = "All new classifications will use " + btn.dataset.name + " v" + btn.dataset.version + ". Past records keep the model they were classified with.";
-        actDialog.showModal();
+    if (actDialog && actForm) {
+      wireDialog(actDialog);
+      document.querySelectorAll("[data-activate]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          actForm.action = btn.dataset.activate;
+          document.getElementById("activate-title").textContent = "Set " + btn.dataset.name + " as the active model?";
+          document.getElementById("activate-text").textContent = "All new classifications will use " + btn.dataset.name + " v" + btn.dataset.version + ". Past records keep the model they were classified with.";
+          actDialog.showModal();
+        });
       });
-    });
+    }
 
     var upDialog = document.getElementById("upload-dialog");
-    wireDialog(upDialog);
-    document.getElementById("upload-open").addEventListener("click", function () { upDialog.showModal(); });
-    if (upDialog.hasAttribute("data-open")) upDialog.showModal();
+    var upOpen = document.getElementById("upload-open");
+    if (upDialog && upOpen) {
+      wireDialog(upDialog);
+      upOpen.addEventListener("click", function () { upDialog.showModal(); });
+      if (upDialog.hasAttribute("data-open")) upDialog.showModal();
+    }
+
+    var trainDialog = document.getElementById("train-dialog");
+    var trainOpen = document.getElementById("train-open");
+    if (trainDialog && trainOpen) {
+      wireDialog(trainDialog);
+      trainOpen.addEventListener("click", function () {
+        if (!trainOpen.disabled) trainDialog.showModal();
+      });
+      if (trainDialog.hasAttribute("data-open")) trainDialog.showModal();
+      var trainForm = trainDialog.querySelector("form");
+      if (trainForm) {
+        trainForm.addEventListener("submit", function () {
+          var btn = document.getElementById("train-submit");
+          if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
+        });
+      }
+    }
+
+    var box = document.getElementById("train-progress");
+    if (!box || (box.dataset.status !== "running" && box.dataset.status !== "pending")) return;
+    var fill = document.getElementById("train-progress-fill");
+    var label = document.getElementById("train-progress-text");
+    var bar = box.querySelector("[role=progressbar]");
+    function pollTrain() {
+      fetch(box.dataset.statusUrl, { headers: { Accept: "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          var pct = s.total ? (s.processed / s.total) * 100 : 0;
+          if (fill) fill.style.width = pct + "%";
+          if (bar) {
+            bar.setAttribute("aria-valuenow", s.processed);
+            bar.setAttribute("aria-valuemax", s.total);
+          }
+          if (label) {
+            label.textContent = "Progress: " + s.processed + " / " + s.total + " models"
+              + (s.message ? " · " + s.message : "");
+          }
+          if (s.status !== "running" && s.status !== "pending") {
+            var u = new URL(window.location.href);
+            u.searchParams.set("run", s.id);
+            u.searchParams.set("toast", "1");
+            window.location.replace(u.toString());
+          } else setTimeout(pollTrain, 2500);
+        })
+        .catch(function () { setTimeout(pollTrain, 5000); });
+    }
+    setTimeout(pollTrain, 1500);
   };
 
   EIC.initDataset = function () {

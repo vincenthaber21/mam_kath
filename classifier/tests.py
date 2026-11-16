@@ -80,6 +80,9 @@ class ClassifyTests(Base):
         self.assertIn("maximum is 10 MB", rec.error)
 
     def test_no_active_model_without_demo_mode_fails(self):
+        from registry.models import SelectionSetting
+
+        SelectionSetting.objects.update_or_create(pk=1, defaults={"mode": "manual"})  # auto mode would pick one
         MLModel.objects.update(is_active=False)
         self.post(image_bytes())
         self.assertIn("No active model", Classification.objects.get().error)
@@ -135,3 +138,115 @@ class DemoAndLogTests(Base):
         self.assertEqual(res.context["page"].paginator.count, 1)
         csv_text = self.client.get(reverse("history_export"), {"predicted": "crime"}).content.decode()
         self.assertEqual(len(csv_text.strip().splitlines()), 1 + 13)
+
+
+LABEL_ORDER = ["fire", "crime", "medical_emergency", "accident", "disaster"]
+
+
+def per_model(outputs):
+    """_keras_predict stand-in: each model (by name) returns fixed scores."""
+    def _fake(meta, img):
+        return np.array(outputs[meta.name]), 10.0
+    return _fake
+
+
+@override_settings(EIC_DEMO_MODE=False, MEDIA_ROOT="/tmp/eic-test-media")
+class SelectionModeTests(Base):
+    def setUp(self):
+        super().setUp()
+        from registry.models import SelectionSetting
+
+        self.setting = SelectionSetting.get()
+        mk = lambda name, acc, active=False: MLModel.objects.create(  # noqa: E731
+            name=name, preprocessing="efficientnet", labels_json=LABEL_ORDER, val_accuracy=acc,
+            is_active=active, file=SimpleUploadedFile(f"{name}.keras", b"x"))
+        self.eff = mk("EfficientNet-B0", 0.985)
+        self.mob = mk("MobileNetV2", 0.97, active=True)
+        self.res = mk("ResNet50", 0.96)
+
+    def post(self):
+        return self.client.post(reverse("classify"), {"image": SimpleUploadedFile("a.jpg", image_bytes())})
+
+    def set_mode(self, mode):
+        self.client.post(reverse("model_selection"), {"mode": mode})
+        self.setting.refresh_from_db()
+
+    def test_auto_mode_uses_highest_accuracy_and_marks_it_active(self):
+        self.assertEqual(self.setting.mode, "auto")
+        with mock.patch.object(services, "_keras_predict", side_effect=fake_keras):
+            self.post()
+        rec = Classification.objects.get()
+        self.assertEqual(rec.model, self.eff)
+        self.assertEqual(rec.selection_mode, "auto")
+        self.eff.refresh_from_db(); self.mob.refresh_from_db()
+        self.assertTrue(self.eff.is_active)
+        self.assertFalse(self.mob.is_active)
+
+    def test_auto_mode_follows_a_better_new_model(self):
+        better = MLModel.objects.create(name="New", preprocessing="efficientnet", labels_json=LABEL_ORDER,
+                                        val_accuracy=0.99, file=SimpleUploadedFile("n.keras", b"x"))
+        self.assertEqual(services.active_model(), better)
+
+    def test_set_active_switches_to_manual(self):
+        self.client.post(reverse("model_activate", args=[self.res.pk]))
+        self.setting.refresh_from_db()
+        self.assertEqual(self.setting.mode, "manual")
+        self.assertEqual(services.active_model(), self.res)
+
+    def test_voting_majority_wins_and_most_confident_model_decides(self):
+        self.set_mode("voting")
+        outputs = {
+            "EfficientNet-B0": [0.70, 0.10, 0.10, 0.05, 0.05],   # fire 0.70
+            "MobileNetV2":     [0.90, 0.02, 0.03, 0.03, 0.02],   # fire 0.90  <- most confident fire voter
+            "ResNet50":        [0.05, 0.05, 0.05, 0.05, 0.80],   # disaster 0.80
+        }
+        with mock.patch.object(services, "_keras_predict", side_effect=per_model(outputs)):
+            self.post()
+        rec = Classification.objects.get()
+        self.assertEqual(rec.selection_mode, "voting")
+        self.assertEqual(rec.predicted_label, "fire")
+        self.assertAlmostEqual(rec.confidence, 0.90)
+        self.assertEqual(rec.model, self.mob)
+        self.assertEqual(len(rec.votes), 3)
+        self.assertEqual([v["model_id"] for v in rec.votes if v["deciding"]], [self.mob.pk])
+        self.assertAlmostEqual(rec.inference_ms, 30.0)
+
+    def test_voting_tie_goes_to_most_confident_model(self):
+        self.set_mode("voting")
+        self.res.delete()
+        outputs = {
+            "EfficientNet-B0": [0.60, 0.10, 0.10, 0.10, 0.10],   # fire 0.60
+            "MobileNetV2":     [0.05, 0.05, 0.05, 0.80, 0.05],   # accident 0.80
+        }
+        with mock.patch.object(services, "_keras_predict", side_effect=per_model(outputs)):
+            self.post()
+        rec = Classification.objects.get()
+        self.assertEqual(rec.predicted_label, "accident")
+        self.assertEqual(rec.model, self.mob)
+
+    def test_voting_skips_a_broken_model(self):
+        self.set_mode("voting")
+
+        def flaky(meta, img):
+            if meta.name == "ResNet50":
+                raise services.ClassificationError("Could not load model file")
+            return np.array([0.1, 0.7, 0.1, 0.05, 0.05]), 10.0
+
+        with mock.patch.object(services, "_keras_predict", side_effect=flaky):
+            self.post()
+        rec = Classification.objects.get()
+        self.assertEqual(rec.status, "success")
+        self.assertEqual(rec.predicted_label, "crime")
+        self.assertEqual(len(rec.votes), 2)
+
+    def test_models_and_result_pages_render(self):
+        self.set_mode("voting")
+        with mock.patch.object(services, "_keras_predict", side_effect=fake_keras):
+            self.post()
+        rec = Classification.objects.get()
+        page = self.client.get(reverse("models")).content.decode()
+        self.assertIn("Voting (all models)", page)
+        self.assertIn("voting</strong> with 3 models", page)
+        result = self.client.get(reverse("result", args=[rec.pk])).content.decode()
+        self.assertIn("Model votes", result)
+        self.assertIn("Deciding", result)

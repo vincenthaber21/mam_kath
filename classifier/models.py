@@ -17,7 +17,11 @@ class Classification(models.Model):
     width = models.IntegerField(null=True, blank=True)
     height = models.IntegerField(null=True, blank=True)
     size_kb = models.IntegerField(null=True, blank=True)
-    model = models.ForeignKey("registry.MLModel", on_delete=models.SET_NULL, null=True, blank=True)
+    model = models.ForeignKey("registry.MLModel", on_delete=models.SET_NULL, null=True, blank=True,
+                              help_text="The model whose prediction was used (the deciding model when voting)")
+    selection_mode = models.CharField(max_length=10, blank=True, help_text="auto, voting or manual")
+    votes = models.JSONField(default=list, blank=True,
+                             help_text="Voting mode: one entry per model with its label and confidence")
     demo = models.BooleanField(default=False, help_text="Simulated prediction (demo mode, no trained model)")
     predicted_label = models.CharField(max_length=30, choices=LABEL_CHOICES, blank=True)
     confidence = models.FloatField(null=True, blank=True)
@@ -29,6 +33,17 @@ class Classification(models.Model):
     actual_label = models.CharField(max_length=30, choices=LABEL_CHOICES, blank=True)
     status = models.CharField(max_length=10, choices=STATUS, default="success")
     error = models.TextField(blank=True)
+    # Optional incident-report context from the mobile app (or web form).
+    notes = models.TextField(blank=True, help_text="Reporter notes / what happened")
+    location_text = models.CharField(max_length=255, blank=True, help_text="Place description")
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    source = models.CharField(
+        max_length=10,
+        blank=True,
+        default="web",
+        help_text="web or mobile — where the report was submitted",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

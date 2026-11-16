@@ -18,6 +18,23 @@ Predictions are supplementary and need human verification. The site does not dis
 | Models | `/models/` | Compare EfficientNet / MobileNetV2 / ResNet50, training curves, upload a model, choose the active one |
 | Dataset | `/dataset/` | Images per category and train / validation / test split |
 | Admin | `/admin/` | Django admin for users and all records |
+| Mobile API | `/api/…` | JSON API used by the Expo reporter app (login, classify, history, verify) |
+
+## Mobile reporter app
+
+An Expo (React Native) app in `mobile/` lets field users capture an incident photo (camera or gallery),
+optionally attach notes/GPS, and submit it into the same classification log the website uses
+(`source=mobile`). See [`mobile/README.md`](mobile/README.md) for install and LAN setup.
+
+Quick start (with Django already running on `0.0.0.0:8000`):
+
+```bash
+cd mobile
+npm install
+npx expo start
+```
+
+On a physical phone set `EXPO_PUBLIC_API_URL=http://YOUR_PC_LAN_IP:8000/api` and add that IP to `ALLOWED_HOSTS`.
 
 ## Run it on your computer
 

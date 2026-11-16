@@ -13,14 +13,31 @@ from django.utils import timezone
 from .forms import VerificationForm
 from .labels import LABEL_NAMES, LABELS, label_name
 from .models import Classification
-from .services import active_model, classify_upload
+from .services import active_model, classify_upload, models_in_use, preload_active_model, selection_mode
 
 PAGE_SIZE = 20
 
 
 def front_page(request):
     """Public introduction to the research prototype and its workflow."""
-    return render(request, "frontpage.html")
+    preview = (
+        Classification.objects
+        .filter(status="success", demo=False)
+        .exclude(predicted_label="")
+        .select_related("model")
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    preview_scores = []
+    if preview:
+        preview_scores = [
+            (label_name(label), score) for label, score in preview.sorted_scores()[:3]
+        ]
+    return render(request, "frontpage.html", {
+        "preview": preview,
+        "preview_scores": preview_scores,
+        "model_ready": active_model(sync=False) is not None,
+    })
 
 
 @login_required
@@ -37,8 +54,13 @@ def classify_page(request):
             if rec.failed:
                 messages.error(request, f"Classification failed: {rec.error}")
             return redirect("result", pk=rec.pk)
+    # Kick off (or continue) background load so the next POST is not a cold start.
+    preload_active_model()
+    in_use = models_in_use()
     return render(request, "classifier/classify.html", {
-        "active": active_model(),
+        "active": active_model(sync=True),
+        "selection_mode": selection_mode(),
+        "voting": in_use if len(in_use) > 1 else [],
         "labels": [(l, LABEL_NAMES[l]) for l in LABELS],
         "reference": reference,
         "error": error,
@@ -123,7 +145,8 @@ def history_export(request):
     w.writerow([
         "id", "created_at", "filename", "width", "height", "size_kb", "model", "predicted_label", "confidence",
         *[f"score_{l}" for l in LABELS], "low_confidence", "inference_ms", "reference_label", "match",
-        "verification", "actual_label", "status", "error", "demo",
+        "verification", "actual_label", "status", "error", "demo", "selection_mode", "votes",
+        "source", "notes", "location_text", "latitude", "longitude",
     ])
     for c in filtered_queryset(filters).iterator():
         w.writerow([
@@ -133,6 +156,8 @@ def history_export(request):
             *[f"{float(c.scores.get(l, 0)):.4f}" if c.scores else "" for l in LABELS],
             c.low_confidence, c.inference_ms, c.reference_label,
             ("yes" if c.is_match else "no") if c.has_match else "", c.verification, c.actual_label,
-            c.status, c.error, c.demo,
+            c.status, c.error, c.demo, c.selection_mode,
+            "; ".join(f"{v['model']}={v['label']} ({v['confidence']:.3f})" for v in (c.votes or [])),
+            c.source, c.notes, c.location_text, c.latitude, c.longitude,
         ])
     return response

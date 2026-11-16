@@ -65,12 +65,6 @@
 <div class="print-header"><h1 class="h1">Emergency Incident Classifier — Evaluation report</h1>
   <p class="muted small">Evaluation #{{ ev.pk }} · {{ ev.model.name }} v{{ ev.model.version }} · {{ ev.test_set_name }} · {{ ev.finished_at|date:"M j, Y, g:i A" }}</p></div>
 {% if ev.demo %}<div class="notice mb-6" role="note"><strong class="block">Simulated results.</strong> This evaluation used demo predictions because the model has no trained file. Do not report these numbers.</div>{% endif %}
-<div class="grid grid-4 mb-6">
-  <div class="card"><p class="eyebrow">Accuracy</p><p class="kpi">{{ report.accuracy|pct }}</p><p class="muted xs">held-out test set</p></div>
-  <div class="card"><p class="eyebrow">Macro F1</p><p class="kpi">{{ report.macro.f1|fixed2 }}</p><p class="muted xs">{{ report.labels|length }} classes</p></div>
-  <div class="card"><p class="eyebrow">Mean inference</p><p class="kpi">{{ ev.inference_ms.mean|ms }}</p><p class="muted xs">median {{ ev.inference_ms.median|floatformat:0 }} · min {{ ev.inference_ms.min|floatformat:0 }} · max {{ ev.inference_ms.max|floatformat:0 }}</p></div>
-  <div class="card"><p class="eyebrow">Failed attempts</p><p class="kpi">{{ ev.failed }}</p><p class="muted xs">counted separately</p></div>
-</div>
 
 <div class="grid grid-2 mb-6">
   <div class="card">

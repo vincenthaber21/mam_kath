@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load eic %}
 {% block title %}Classification log{% endblock %}
-{% block description %}Every submission with prediction, confidence, reference label and processing time.{% endblock %}
+{% block description %}Every submission with prediction.{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1 class="h1">Classification log</h1>
-  <p class="subtitle">Every submission with prediction, confidence, reference label and processing time (Objective 2 records).</p>
+  <p class="subtitle">Every submission with prediction (Objective 2 records).</p>
 </div>
 
 <form method="get" class="card mb-6 filters" id="filters">
@@ -46,19 +46,13 @@
     <table class="table min-820">
       <caption class="sr-only">Classification log</caption>
       <thead><tr>
-        <th scope="col">Image</th><th scope="col">Record</th><th scope="col">Predicted</th><th scope="col">Confidence</th>
-        <th scope="col">Reference</th><th scope="col">Match</th><th scope="col">Time</th><th scope="col">Status</th></tr></thead>
+        <th scope="col">Image</th><th scope="col">Record</th><th scope="col">Predicted</th></tr></thead>
       <tbody>
       {% for c in page.object_list %}
         <tr class="row-link" data-href="{% url 'result' c.pk %}" tabindex="0" aria-label="Open record {{ c.record_no }}">
           <td>{% if c.image %}<img src="{{ c.image.url }}" alt="" loading="lazy" class="thumb">{% else %}<div class="thumb hatch" aria-hidden="true"></div>{% endif %}</td>
           <td class="num"><a href="{% url 'result' c.pk %}">{{ c.record_no }}</a></td>
           <td>{% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% else %}—{% endif %}</td>
-          <td class="num">{{ c.confidence|pct }}</td>
-          <td>{{ c.reference_label|label_name }}</td>
-          <td>{% if not c.has_match %}<span aria-label="No reference">—</span>{% elif c.is_match %}<span class="success" aria-label="Match">✓</span>{% else %}<span class="danger" aria-label="Mismatch">✕</span>{% endif %}</td>
-          <td class="num">{{ c.inference_ms|ms }}</td>
-          <td>{% if c.failed %}<span class="danger">Failed: {{ c.error|default:"error"|truncatechars:48 }}</span>{% else %}Success{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>

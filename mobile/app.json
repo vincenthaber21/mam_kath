@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "EIC Reporter",
+    "slug": "eic-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "eic",
+    "assetBundlePatterns": ["assets/*"],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Capture an incident photo to report and classify it.",
+        "NSPhotoLibraryUsageDescription": "Choose an incident photo from your gallery to report.",
+        "NSLocationWhenInUseUsageDescription": "Attach your approximate location to the incident report."
+      },
+      "bundleIdentifier": "ph.edu.dmmmsu.eic.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B3D2E"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "package": "ph.edu.dmmmsu.eic.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiUrl": "https://bb6cjv85-8000.asse.devtunnels.ms/api"
+    },
+    "plugins": [
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#0B3D2E",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ]
+    ]
+  }
+}

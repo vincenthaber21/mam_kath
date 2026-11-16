@@ -9,8 +9,101 @@
 </div>
 
 <div class="card mb-6">
+  <div class="row between">
+    <div>
+      <h2 class="eyebrow">Train models</h2>
+      <p class="muted small mt-1">Train EfficientNet-B0, MobileNetV2 and ResNet50 in one run. The best validation macro F1 becomes active.</p>
+    </div>
+    <button type="button" class="btn btn-primary" id="train-open" {% if training_busy %}disabled{% endif %}>
+      {% if training_busy %}Training…{% else %}Train all models{% endif %}
+    </button>
+  </div>
+
+  {% if train_run %}
+  <div class="mt-5" id="train-progress" data-status-url="{% url 'model_train_status' train_run.pk %}" data-status="{{ train_run.status }}">
+    <p class="muted small" id="train-progress-text">
+      {% if train_run.status == "failed" %}Failed{% elif train_run.status == "done" %}Done{% else %}Progress{% endif %}:
+      {{ train_run.processed }} / {{ train_run.total }} models
+      {% if train_run.message %} · {{ train_run.message }}{% endif %}
+    </p>
+    <div class="track track-lg mt-2" role="progressbar" aria-label="Training progress" aria-valuemin="0" aria-valuemax="{{ train_run.total }}" aria-valuenow="{{ train_run.processed }}">
+      <div class="fill fill-brand" id="train-progress-fill" style="width: {{ train_run.progress_pct }}%"></div>
+    </div>
+    {% if train_run.status == "failed" %}<p class="error mt-2" role="alert">{{ train_run.error|default:"Training failed." }}</p>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<dialog id="train-dialog" class="dialog" aria-labelledby="train-title" {% if train_open %}data-open{% endif %}>
+  <form method="post" action="{% url 'model_train' %}" class="stack" novalidate>
+    {% csrf_token %}
+    <div>
+      <h2 class="h2" id="train-title">Train all models</h2>
+      <p class="muted small mt-1">Runs every selected architecture back-to-back on the same dataset, then registers them for comparison.</p>
+    </div>
+    {% for e in train_form.non_field_errors %}<p class="error" role="alert">{{ e }}</p>{% endfor %}
+    <fieldset>
+      <legend class="eyebrow">{{ train_form.archs.label }}</legend>
+      <div class="stack mt-2">
+        {% for choice in train_form.archs %}
+          <label class="check">{{ choice.tag }} {{ choice.choice_label }}</label>
+        {% endfor %}
+      </div>
+      {% for e in train_form.archs.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+      <p class="muted xs mt-2">{{ train_form.archs.help_text }}</p>
+    </fieldset>
+    {% for field in train_form %}
+      {% if field.name != "archs" and field.name != "activate_best" %}
+      <div>
+        <label for="{{ field.id_for_label }}" class="eyebrow">{{ field.label }}</label>
+        <div class="mt-2">{{ field }}</div>
+        {% if field.help_text %}<p class="muted xs mt-1">{{ field.help_text }}</p>{% endif %}
+        {% for e in field.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+      </div>
+      {% endif %}
+    {% endfor %}
+    <label class="check">{{ train_form.activate_best }} {{ train_form.activate_best.label }}</label>
+    <div class="row end">
+      <button type="button" class="btn btn-outline" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary" id="train-submit">Start training</button>
+    </div>
+  </form>
+</dialog>
+
+<form method="post" action="{% url 'model_selection' %}" class="card mb-6" id="selection-form">
+  {% csrf_token %}
+  <div class="row between">
+    <div>
+      <h2 class="eyebrow">Model used for classification</h2>
+      <p class="muted small mt-1">
+        {% if selection.mode == "voting" and voting_ids %}Now: <strong class="fg">voting</strong> with {{ voters|length }} models.
+        {% elif active %}Now: <strong class="fg">{{ active.name }} v{{ active.version }}</strong>{% if active.val_accuracy is not None %} · {{ active.val_accuracy|pct }} validation accuracy{% endif %}.
+        {% else %}No trained model yet.{% endif %}
+      </p>
+    </div>
+  </div>
+  <fieldset class="mode-options mt-4">
+    <legend class="sr-only">Selection mode</legend>
+    {% for value, name in selection_modes %}
+    <label class="mode-option{% if selection.mode == value %} is-selected{% endif %}">
+      <input type="radio" name="mode" value="{{ value }}" {% if selection.mode == value %}checked{% endif %}>
+      <span>
+        <strong class="block">{% if value == "auto" %}Automatic (highest accuracy){% elif value == "voting" %}Voting (all models){% else %}Manual{% endif %}</strong>
+        <span class="muted xs">
+          {% if value == "auto" %}Always uses the trained model with the highest validation accuracy. Switches by itself when a better model is trained.
+          {% elif value == "voting" %}Every trained model classifies the image. The label with the most votes wins; on a tie, the most confident model decides. Slower: runs all models.
+          {% else %}Uses the model you choose with Set active.{% endif %}
+        </span>
+      </span>
+    </label>
+    {% endfor %}
+  </fieldset>
+  <noscript><div class="row end mt-4"><button type="submit" class="btn btn-primary">Save</button></div></noscript>
+</form>
+
+<div class="card mb-6">
   {% if not models %}
-    {% include "partials/empty.html" with title="No models registered" text="Upload a trained model below, or run python manage.py seed_demo to see examples." %}
+    {% include "partials/empty.html" with title="No models registered" text="Use Train all models above, upload a trained model below, or run python manage.py seed_demo to see examples." %}
   {% else %}
   <div class="table-scroll">
     <table class="table min-760">
@@ -25,7 +118,8 @@
           <td class="num">{{ m.test_accuracy|pct }}</td>
           <td class="num">{% if m.size_mb is not None %}{{ m.size_mb }} MB{% else %}—{% endif %}</td>
           <td class="num">{{ m.avg_inference_ms|ms }}</td>
-          <td>{% if m.is_active %}<span class="badge badge-active">Active</span>{% else %}
+          <td>{% if m.pk in voting_ids %}<span class="badge badge-active">Voting</span>{% if m.is_active %} <span class="badge badge-active">Best</span>{% endif %}
+            {% elif m.is_active %}<span class="badge badge-active">{% if selection.mode == "auto" %}Active · best{% else %}Active{% endif %}</span>{% else %}
             <button type="button" class="btn btn-outline btn-sm" data-activate="{% url 'model_activate' m.pk %}" data-name="{{ m.name }}" data-version="{{ m.version }}">Set active</button>{% endif %}</td>
         </tr>
       {% endfor %}
@@ -85,4 +179,7 @@
   </form>
 </dialog>
 {% endblock %}
-{% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script><script>EIC.initModels();</script>{% endblock %}
+{% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script><script>EIC.initModels();
+document.querySelectorAll('#selection-form input[name="mode"]').forEach(function (r) {
+  r.addEventListener('change', function () { r.form.submit(); });  // save as soon as a mode is picked
+});</script>{% endblock %}

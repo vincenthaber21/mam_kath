@@ -41,8 +41,8 @@
   <div class="card fit">
     <h2 class="eyebrow">Categories</h2>
     <div class="chips mt-3">{% for value, name in labels %}<span class="chip">{{ name }}</span>{% endfor %}</div>
-    <h2 class="eyebrow mt-7">Active model</h2>
-    <p class="mt-2">{% if active %}{{ active.name }} · v{{ active.version }}{% if not active.file %} <span class="muted small">(no model file{% if DEMO_PREDICTIONS %}, demo predictions{% endif %})</span>{% endif %}{% else %}No active model — set one on the <a href="{% url 'models' %}">Models page</a>.{% endif %}</p>
+    <h2 class="eyebrow mt-7">{% if voting %}Models (voting){% else %}Active model{% endif %}</h2>
+    <p class="mt-2">{% if voting %}{{ voting|length }} models vote: {% for m in voting %}{{ m.name }}{% if not forloop.last %}, {% endif %}{% endfor %}. <a href="{% url 'models' %}">Change</a>{% elif active %}{% if selection_mode == "auto" %}<span class="muted small">Automatic (highest accuracy):</span> {% endif %}{{ active.name }} · v{{ active.version }}{% if not active.file %} <span class="muted small">(no model file{% if DEMO_PREDICTIONS %}, demo predictions{% endif %})</span>{% endif %}{% else %}No active model — set one on the <a href="{% url 'models' %}">Models page</a>.{% endif %}</p>
     <div class="notice mt-4" role="note">Predictions are supplementary information and require human verification. This tool does not dispatch or notify agencies.</div>
   </div>
 </div>

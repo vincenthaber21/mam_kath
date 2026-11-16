@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load eic %}
 {% block title %}AI-assisted emergency image review{% endblock %}
 {% block description %}Explore how the Emergency Incident Classifier turns one incident photo into a confidence-scored category for human review.{% endblock %}
 {% block og_title %}Emergency Incident Classifier · From photo to informed review{% endblock %}
@@ -41,37 +42,71 @@
       </ul>
     </div>
 
-    <div class="product-preview" aria-label="Illustrative classifier interface preview">
+    <div class="product-preview" aria-label="{% if preview %}Recent real classification result{% else %}Classifier interface preview{% endif %}">
       <div class="preview-topbar">
         <div class="preview-dots" aria-hidden="true"><span></span><span></span><span></span></div>
         <span>Classification workspace</span>
-        <span class="preview-label">Interface example</span>
+        <span class="preview-label">{% if preview %}Live result{% else %}Awaiting first run{% endif %}</span>
       </div>
       <div class="preview-body">
         <div class="preview-heading">
-          <div><span class="preview-step">NEW CLASSIFICATION</span><h2>Incident image review</h2></div>
-          <span class="preview-model">Model ready</span>
+          <div><span class="preview-step">{% if preview %}RECORD {{ preview.record_no }}{% else %}NEW CLASSIFICATION{% endif %}</span><h2>Incident image review</h2></div>
+          <span class="preview-model">{% if model_ready %}Model ready{% else %}No active model{% endif %}</span>
         </div>
+        {% if preview %}
+        <div class="preview-grid">
+          <div class="preview-upload">
+            {% if preview.image %}
+            <div class="preview-image preview-image-real">
+              <img src="{{ preview.image.url }}" alt="{{ preview.filename }}">
+            </div>
+            {% else %}
+            <div class="preview-image" aria-hidden="true">
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="9" width="34" height="30" rx="4"/><circle cx="18" cy="19" r="3"/><path d="m10 35 10-10 7 7 5-5 6 6"/></svg>
+              <span>{{ preview.filename|default:"incident-photo" }}</span>
+            </div>
+            {% endif %}
+            <div class="preview-file">
+              <span>IMG</span>
+              <div>
+                <strong>{{ preview.filename|default:"Submitted image" }}</strong>
+                <small>{% if preview.size_kb is not None %}{{ preview.size_kb }} KB{% endif %}{% if preview.width and preview.height %} · {{ preview.width }} × {{ preview.height }}{% endif %}</small>
+              </div>
+              <b aria-hidden="true">✓</b>
+            </div>
+          </div>
+          <div class="preview-result">
+            <span class="preview-step">MODEL RESULT</span>
+            <div class="preview-result-title"><span>Predicted category</span><strong>{{ preview.predicted_label|label_name }}</strong></div>
+            <div class="preview-confidence"><strong>{{ preview.confidence|width_pct }}<span>%</span></strong><span>confidence</span></div>
+            {% for name, value in preview_scores %}
+            <div class="preview-score{% if not forloop.first %} muted-score{% endif %}">
+              <div><span>{{ name }}</span><b>{{ value|pct }}</b></div>
+              <div class="preview-track"><span style="width: {{ value|width_pct }}%"></span></div>
+            </div>
+            {% endfor %}
+            <div class="preview-review"><span aria-hidden="true">✓</span><div><strong>Ready for human review</strong><small>{% if preview.model %}{{ preview.model.name }} v{{ preview.model.version }}{% else %}Prediction is not a final decision{% endif %}</small></div></div>
+          </div>
+        </div>
+        <p class="preview-disclaimer">Real classification from your workspace · {{ preview.created_at|date:"M j, Y, g:i A" }}</p>
+        {% else %}
         <div class="preview-grid">
           <div class="preview-upload">
             <div class="preview-image" aria-hidden="true">
               <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="9" width="34" height="30" rx="4"/><circle cx="18" cy="19" r="3"/><path d="m10 35 10-10 7 7 5-5 6 6"/></svg>
-              <span>incident-photo.jpg</span>
-              <small>Image ready for analysis</small>
+              <span>No classification yet</span>
+              <small>Upload an image in the workspace</small>
             </div>
-            <div class="preview-file"><span>JPG</span><div><strong>incident-photo.jpg</strong><small>1.8 MB · 1600 × 1200</small></div><b aria-hidden="true">✓</b></div>
           </div>
           <div class="preview-result">
-            <span class="preview-step">ILLUSTRATIVE RESULT</span>
-            <div class="preview-result-title"><span>Predicted category</span><strong>Accident</strong></div>
-            <div class="preview-confidence"><strong>87.6<span>%</span></strong><span>confidence</span></div>
-            <div class="preview-score"><div><span>Accident</span><b>87.6%</b></div><div class="preview-track"><span style="width:87.6%"></span></div></div>
-            <div class="preview-score muted-score"><div><span>Fire</span><b>5.2%</b></div><div class="preview-track"><span style="width:5.2%"></span></div></div>
-            <div class="preview-score muted-score"><div><span>Disaster</span><b>3.1%</b></div><div class="preview-track"><span style="width:3.1%"></span></div></div>
-            <div class="preview-review"><span aria-hidden="true">✓</span><div><strong>Ready for human review</strong><small>Prediction is not a final decision</small></div></div>
+            <span class="preview-step">WAITING FOR FIRST RESULT</span>
+            <div class="preview-result-title"><span>Predicted category</span><strong>—</strong></div>
+            <div class="preview-confidence"><strong>—<span></span></strong><span>confidence</span></div>
+            <div class="preview-review"><span aria-hidden="true">→</span><div><strong>Open the classifier</strong><small>A real result will appear here after your first run</small></div></div>
           </div>
         </div>
-        <p class="preview-disclaimer">Example values only. This preview does not show a real model result.</p>
+        <p class="preview-disclaimer">No saved classifications yet. This panel shows your latest real model result.</p>
+        {% endif %}
       </div>
     </div>
   </section>

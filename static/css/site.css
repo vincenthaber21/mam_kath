@@ -246,10 +246,12 @@ textarea.field { min-height: 88px; }
 .preview-step { color: var(--brand); font-size: 9px; font-weight: 700; letter-spacing: 0.14em; }
 .preview-model { padding: 4px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-soft-fg); font-size: 10px; font-weight: 600; }
 .preview-grid { display: grid; gap: 14px; margin-top: 20px; }
-.preview-image { aspect-ratio: 4 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed var(--border); border-radius: 12px; background: var(--bg); color: var(--muted); }
+.preview-image { aspect-ratio: 4 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed var(--border); border-radius: 12px; background: var(--bg); color: var(--muted); overflow: hidden; }
 .preview-image svg { width: 42px; color: var(--brand); }
 .preview-image span { margin-top: 12px; color: var(--fg); font-size: 11px; font-weight: 600; }
 .preview-image small { margin-top: 3px; font-size: 9px; }
+.preview-image-real { border-style: solid; padding: 0; }
+.preview-image-real img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .preview-file { display: flex; align-items: center; gap: 9px; margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
 .preview-file > span { padding: 4px 6px; border-radius: 4px; background: var(--brand-soft); color: var(--brand-soft-fg); font-size: 8px; font-weight: 700; }
 .preview-file div { flex: 1; min-width: 0; }
@@ -419,3 +421,15 @@ textarea.field { min-height: 88px; }
   .grid-4 { grid-template-columns: repeat(4, 1fr); }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- model selection mode (Models page) ---------- */
+.mode-options { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; }
+@media (min-width: 760px) { .mode-options { grid-template-columns: repeat(3, 1fr); } }
+.mode-option { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.mode-option input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
+.mode-option:hover, .mode-option.is-selected { border-color: var(--brand); }
+.mode-option.is-selected { background: var(--brand-soft); }
+.mode-option.is-selected .muted { color: var(--brand-soft-fg); }
+.votes { width: 100%; border-collapse: collapse; font-size: 14px; }
+.votes th, .votes td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.votes td.num, .votes th.num { text-align: right; }

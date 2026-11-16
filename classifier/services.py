@@ -6,6 +6,9 @@ lazily so the website (and its tests) start without it.
 """
 import hashlib
 import io
+import logging
+import os
+import sys
 import threading
 import time
 
@@ -15,6 +18,8 @@ from django.core.files.base import ContentFile
 from PIL import Image, UnidentifiedImageError
 
 from .labels import LABELS
+
+logger = logging.getLogger(__name__)
 
 
 class ClassificationError(Exception):
@@ -57,13 +62,29 @@ def open_image(data):
 
 # ---------------------------------------------------------------- model cache
 
-_cache = {"key": None, "model": None}
+# (model pk, file name) -> (keras model, preprocess fn). Several models stay loaded so voting is fast.
+_cache = {}
 _lock = threading.Lock()
+_warmup_started = False
+# No background preloading under "manage.py test" (threads cannot share the in-memory test database).
+_PRELOAD = not (len(sys.argv) > 1 and sys.argv[1] == "test")
+
+
+def _silence_tf_logs():
+    # Must be set before the first TensorFlow import.
+    # Keep oneDNN on (do not set TF_ENABLE_ONEDNN_OPTS=0) — it speeds up CPU inference.
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
+
+def _import_tf():
+    _silence_tf_logs()
+    import tensorflow as tf  # noqa: WPS433 (lazy import keeps startup fast)
+
+    return tf
 
 
 def _preprocess_fn(name):
-    import tensorflow as tf  # noqa: WPS433 (lazy import keeps startup fast)
-
+    tf = _import_tf()
     return {
         "efficientnet": tf.keras.applications.efficientnet.preprocess_input,
         "mobilenet_v2": tf.keras.applications.mobilenet_v2.preprocess_input,
@@ -71,33 +92,97 @@ def _preprocess_fn(name):
     }[name]
 
 
+def _forward(model, x):
+    """Single-image forward pass. Prefer model() over model.predict() — predict() has
+    large per-call overhead for batch size 1."""
+    out = model(x, training=False)
+    return np.asarray(out[0], dtype=np.float64)
+
+
+def _warmup(model, size):
+    """Force graph tracing so the first real upload is not the cold compile."""
+    dummy = np.zeros((1, size, size, 3), dtype=np.float32)
+    _forward(model, dummy)
+
+
 def _load_keras(meta):
     key = (meta.pk, meta.file.name)
     with _lock:
-        if _cache["key"] != key:
+        if key not in _cache:
+            for old in [k for k in _cache if k[0] == meta.pk]:  # model file was replaced
+                del _cache[old]
             try:
-                import tensorflow as tf
+                tf = _import_tf()
             except ImportError:
                 raise ClassificationError(
                     "TensorFlow is not installed on the server. Run: pip install tensorflow-cpu"
                 )
             try:
-                _cache["model"] = tf.keras.models.load_model(meta.file.path, compile=False)
+                model = tf.keras.models.load_model(meta.file.path, compile=False)
             except Exception as exc:  # corrupted or incompatible model file
                 raise ClassificationError(f"Could not load model file: {exc}")
-            _cache["key"] = key
-        return _cache["model"]
+            size = meta.input_size or 224
+            _warmup(model, size)
+            _cache[key] = (model, _preprocess_fn(meta.preprocessing))
+        return _cache[key]
 
 
 def _keras_predict(meta, img):
-    model = _load_keras(meta)
+    model, preprocess = _load_keras(meta)
     size = meta.input_size or 224
     arr = np.asarray(img.convert("RGB").resize((size, size)), dtype=np.float32)
-    x = _preprocess_fn(meta.preprocessing)(np.expand_dims(arr, 0))
+    x = preprocess(np.expand_dims(arr, 0))
     t0 = time.perf_counter()
-    probs = model.predict(x, verbose=0)[0]
+    probs = _forward(model, x)
     ms = (time.perf_counter() - t0) * 1000
-    return np.asarray(probs, dtype=np.float64), ms
+    return probs, ms
+
+
+def ensure_model_loaded(meta=None):
+    """Import TensorFlow and load+warm the model(s) the current selection mode uses
+    (safe to call from a background thread)."""
+    metas = [meta] if meta is not None else models_in_use()
+    metas = [m for m in metas if m is not None and m.file]
+    for m in metas:
+        _load_keras(m)
+    return bool(metas)
+
+
+def preload_active_model():
+    """Start a one-shot background load so the first classify is not cold."""
+    global _warmup_started
+    if not _PRELOAD:
+        return
+    with _lock:
+        if _warmup_started:
+            return
+        _warmup_started = True
+
+    def _run():
+        try:
+            if ensure_model_loaded():
+                logger.info("Active model preloaded for classify.")
+        except Exception:
+            logger.exception("Model preload failed; first classify will load on demand.")
+
+    threading.Thread(target=_run, name="eic-model-preload", daemon=True).start()
+
+
+def preload_models_in_use():
+    """Background-load every model the current selection mode needs (called when the mode changes).
+    The model list is read here, in the request thread; the background thread only loads files."""
+    if not _PRELOAD:
+        return
+    metas = [m for m in models_in_use() if m is not None and m.file]
+
+    def _run():
+        try:
+            for m in metas:
+                _load_keras(m)
+        except Exception:
+            logger.exception("Preloading models for the new selection mode failed.")
+
+    threading.Thread(target=_run, name="eic-model-preload-mode", daemon=True).start()
 
 
 def _demo_predict(img):
@@ -147,15 +232,114 @@ def predict(meta, img):
     }, demo
 
 
-def active_model():
+# ---------------------------------------------------------------- model selection
+
+def selection_mode():
+    """"auto" (highest validation accuracy), "voting" (all trained models) or "manual" (Set active)."""
+    from registry.models import SelectionSetting
+
+    # Read-only (no get_or_create) so it is safe from background threads; no row yet = "auto".
+    return SelectionSetting.objects.filter(pk=1).values_list("mode", flat=True).first() or "auto"
+
+
+def trained_models():
+    """Models that have a file, best first: validation accuracy, then macro F1, then newest."""
+    from django.db.models import F
+
     from registry.models import MLModel
 
+    return list(
+        MLModel.objects.exclude(file="").order_by(
+            F("val_accuracy").desc(nulls_last=True), F("val_macro_f1").desc(nulls_last=True), "-created_at", "-id",
+        )
+    )
+
+
+def best_model():
+    ranked = trained_models()
+    return ranked[0] if ranked else None
+
+
+def active_model(sync=False):
+    """The single model the site uses. In auto/voting mode it follows the highest validation accuracy.
+    With sync=True (page requests only, never background threads) the Active badge is moved to it."""
+    from registry.models import MLModel
+
+    if selection_mode() != "manual":
+        best = best_model()
+        if best is not None:
+            if sync and not best.is_active:
+                best.is_active = True
+                best.save()  # MLModel.save() deactivates the others
+            return best
     return MLModel.objects.filter(is_active=True).first()
+
+
+def models_in_use(sync=False):
+    """All trained models in voting mode (when there are at least two), otherwise the active one."""
+    if selection_mode() == "voting":
+        ranked = trained_models()
+        if len(ranked) >= 2:
+            return ranked
+    return [active_model(sync=sync)]
+
+
+def predict_by_vote(metas, img):
+    """Every model classifies the image and votes for its top label. The label with the most votes wins;
+    on a tie, the label backed by the single most confident model wins. The most confident model among
+    the winners is the deciding model: its confidence and class scores are reported.
+    Returns (result dict incl. "votes", deciding MLModel)."""
+    runs, failures = [], []
+    for m in metas:
+        try:
+            result, _ = predict(m, img)
+        except ClassificationError as exc:
+            failures.append(f"{m}: {exc}")
+            continue
+        runs.append((m, result))
+    if not runs:
+        raise ClassificationError("No model could classify the image. " + " ".join(failures))
+
+    tally = {}
+    for _, r in runs:
+        tally[r["predicted_label"]] = tally.get(r["predicted_label"], 0) + 1
+    top = max(tally.values())
+    deciding_meta, deciding = max(
+        ((m, r) for m, r in runs if tally[r["predicted_label"]] == top), key=lambda mr: mr[1]["confidence"]
+    )
+    result = dict(deciding)
+    result["inference_ms"] = round(sum(r["inference_ms"] for _, r in runs), 1)
+    result["votes"] = [
+        {
+            "model_id": m.pk,
+            "model": f"{m.name} v{m.version}",
+            "val_accuracy": m.val_accuracy,
+            "label": r["predicted_label"],
+            "confidence": round(r["confidence"], 6),
+            "inference_ms": r["inference_ms"],
+            "deciding": m.pk == deciding_meta.pk,
+        }
+        for m, r in runs
+    ]
+    result["vote_count"] = top
+    if failures:
+        logger.warning("Voting skipped models: %s", "; ".join(failures))
+    return result, deciding_meta
 
 
 # ---------------------------------------------------------------- record
 
-def classify_upload(upload, reference_label="", user=None):
+def classify_upload(
+    upload,
+    reference_label="",
+    user=None,
+    *,
+    notes="",
+    location_text="",
+    latitude=None,
+    longitude=None,
+    source="web",
+):
     """Validate, classify and log one upload. Always returns a saved Classification (failed ones too)."""
     from .models import Classification
 
@@ -164,6 +348,11 @@ def classify_upload(upload, reference_label="", user=None):
         filename=(getattr(upload, "name", "") or "")[:255],
         size_kb=round(upload.size / 1024) if upload is not None else None,
         reference_label=reference_label if reference_label in LABELS else "",
+        notes=(notes or "")[:2000],
+        location_text=(location_text or "")[:255],
+        latitude=latitude,
+        longitude=longitude,
+        source=(source or "web")[:10],
     )
     try:
         data, img = read_and_validate(upload)
@@ -174,10 +363,19 @@ def classify_upload(upload, reference_label="", user=None):
 
     rec.width, rec.height = img.size
     rec.image.save(upload.name, ContentFile(data), save=False)
-    meta = active_model()
+    metas = models_in_use(sync=True)
+    rec.selection_mode = selection_mode()
+    meta = metas[0]
     rec.model = meta
     try:
-        result, demo = predict(meta, img)
+        if len(metas) > 1:
+            result, meta = predict_by_vote(metas, img)
+            rec.model = meta  # the model whose prediction was used
+            rec.votes = result.pop("votes")
+            result.pop("vote_count")
+            demo = False
+        else:
+            result, demo = predict(meta, img)
     except ClassificationError as exc:
         rec.status, rec.error = "failed", str(exc)
     except Exception as exc:  # inference crashed: keep the attempt in the log
