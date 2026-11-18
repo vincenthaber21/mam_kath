@@ -23,19 +23,23 @@ class ModelUploadForm(forms.ModelForm):
 
     class Meta:
         model = MLModel
-        fields = ["name", "version", "preprocessing", "input_size", "file", "val_accuracy", "val_macro_f1", "notes"]
+        fields = ["name", "version", "preprocessing", "input_size", "file", "train_accuracy", "val_accuracy", "val_macro_f1", "test_accuracy", "notes"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "field", "placeholder": "EfficientNet-B0"}),
             "version": forms.TextInput(attrs={"class": "field"}),
             "preprocessing": forms.Select(attrs={"class": "field"}),
             "input_size": forms.NumberInput(attrs={"class": "field"}),
             "file": forms.ClearableFileInput(attrs={"class": "field-file", "accept": ".h5,.keras"}),
+            "train_accuracy": forms.NumberInput(attrs={"class": "field", "step": "0.001", "min": 0, "max": 1}),
             "val_accuracy": forms.NumberInput(attrs={"class": "field", "step": "0.001", "min": 0, "max": 1}),
+            "test_accuracy": forms.NumberInput(attrs={"class": "field", "step": "0.001", "min": 0, "max": 1}),
             "val_macro_f1": forms.NumberInput(attrs={"class": "field", "step": "0.001", "min": 0, "max": 1}),
             "notes": forms.Textarea(attrs={"class": "field", "rows": 3}),
         }
         labels = {
+            "train_accuracy": "Training accuracy without augmentation (0-1, optional, for the overfitting check)",
             "val_accuracy": "Validation accuracy (0-1, optional)",
+            "test_accuracy": "Test accuracy (0-1, optional)",
             "val_macro_f1": "Validation macro F1 (0-1, optional)",
             "input_size": "Input size (px)",
         }
@@ -62,6 +66,17 @@ class ModelUploadForm(forms.ModelForm):
         if not isinstance(labels, list) or sorted(labels) != sorted(LABELS):
             raise forms.ValidationError("The list must contain exactly these five labels: " + ", ".join(LABELS) + ".")
         return labels
+
+    def clean(self):
+        cleaned = super().clean()
+        name = cleaned.get("name")
+        version = cleaned.get("version")
+        # Re-uploading the same name+version updates that row instead of duplicating it.
+        if name and version and not self.instance.pk:
+            existing = MLModel.objects.filter(name=name, version=version).first()
+            if existing:
+                self.instance = existing
+        return cleaned
 
     def save(self, commit=True):
         obj = super().save(commit=False)

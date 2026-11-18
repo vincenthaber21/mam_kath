@@ -7,6 +7,7 @@ from .models import DatasetInfo, DatasetSplit, MLModel, TrainingRun
 class MLModelAdmin(admin.ModelAdmin):
     list_display = ["name", "version", "preprocessing", "val_accuracy", "test_accuracy", "avg_inference_ms", "is_active"]
     list_filter = ["is_active", "preprocessing"]
+    search_fields = ["name", "version"]
 
 
 @admin.register(DatasetSplit)

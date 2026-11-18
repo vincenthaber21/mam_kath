@@ -243,16 +243,19 @@ def selection_mode():
 
 
 def trained_models():
-    """Models that have a file, best first: validation accuracy, then macro F1, then newest."""
+    """Models that have a file, best first: not overfitting, validation accuracy, macro F1, newest."""
     from django.db.models import F
 
     from registry.models import MLModel
 
-    return list(
+    ranked = list(
         MLModel.objects.exclude(file="").order_by(
             F("val_accuracy").desc(nulls_last=True), F("val_macro_f1").desc(nulls_last=True), "-created_at", "-id",
         )
     )
+    # Models flagged as overfitting go last (stable sort keeps the accuracy order otherwise).
+    ranked.sort(key=lambda m: m.fit.is_overfit)
+    return ranked
 
 
 def best_model():
@@ -384,5 +387,9 @@ def classify_upload(
         for key, value in result.items():
             setattr(rec, key, value)
         rec.demo = demo
+        # Below the confidence threshold the image is not assigned to any of the
+        # five incident categories (scores are still kept for review).
+        if rec.low_confidence:
+            rec.predicted_label = ""
     rec.save()
     return rec

@@ -3,8 +3,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("", views.index, name="api_index"),
     path("health/", views.health, name="api_health"),
     path("auth/login/", views.login, name="api_login"),
+    path("auth/register/", views.register, name="api_register"),
     path("auth/logout/", views.logout, name="api_logout"),
     path("auth/me/", views.me, name="api_me"),
     path("meta/", views.meta, name="api_meta"),

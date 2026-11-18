@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% load eic %}
+{% block title %}Incident map{% endblock %}
+{% block description %}Google Map of reported incidents with GPS coordinates.{% endblock %}
+{% block content %}
+<div class="page-header split">
+  <div>
+    <h1 class="h1">Incident map</h1>
+    <p class="subtitle">
+      {{ mapped_count }} pin{{ mapped_count|pluralize }} with GPS
+      {% if unmapped_count %} · {{ unmapped_count }} without coordinates{% endif %}
+    </p>
+  </div>
+  <a class="btn btn-outline" href="{% url 'history' %}{% if query %}?{{ query }}{% endif %}">List view</a>
+</div>
+
+<form method="get" class="card mb-6 filters filters-wide" id="filters">
+  <div class="filters-search">
+    <label for="search" class="eyebrow">Search</label>
+    <input id="search" name="search" class="field mt-2" placeholder="Record #, filename, or location" value="{{ filters.search }}">
+  </div>
+  <div>
+    <label for="predicted" class="eyebrow">Predicted</label>
+    <select id="predicted" name="predicted" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      {% for value, name in labels %}<option value="{{ value }}" {% if filters.predicted == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="response_status" class="eyebrow">Response</label>
+    <select id="response_status" name="response_status" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      {% for value, name in response_statuses %}
+        <option value="{{ value }}" {% if filters.response_status == value %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="status" class="eyebrow">Classify</label>
+    <select id="status" name="status" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      <option value="success" {% if filters.status == "success" %}selected{% endif %}>Success</option>
+      <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
+    </select>
+  </div>
+  <div>
+    <label for="date" class="eyebrow">Date</label>
+    <input id="date" name="date" type="date" class="field mt-2" value="{{ filters.date }}" data-autosubmit>
+  </div>
+  <div class="filters-actions">
+    <noscript><button type="submit" class="btn btn-outline">Apply</button></noscript>
+    <a class="btn btn-outline" href="{% url 'incident_map' %}">Clear</a>
+  </div>
+</form>
+
+{% if not google_maps_api_key %}
+<div class="notice mb-6" role="status">
+  Set <code>GOOGLE_MAPS_API_KEY</code> in your <code>.env</code> file to load the map.
+</div>
+{% endif %}
+
+{{ markers|json_script:"incident-map-markers" }}
+{{ map_center|json_script:"incident-map-center" }}
+{{ map_boundary|json_script:"incident-map-boundary" }}
+{{ agency_markers|json_script:"incident-map-agencies" }}
+
+<div class="map-layout">
+  <div class="map-stage card fit">
+    <div id="incident-map" class="incident-map" role="region" aria-label="Incident locations map"></div>
+    {% if not markers %}
+    <div class="map-empty" id="map-empty">
+      <p class="muted">No incidents with GPS match these filters.</p>
+      <p class="muted small mt-1">Reports from the mobile app can attach coordinates when location is allowed.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside class="map-sidebar stack" aria-label="Pinned incidents and agencies">
+    <div class="card">
+      <h2 class="eyebrow">Legend</h2>
+      <ul class="map-legend mt-3">
+        {% for value, name in labels %}
+        <li><span class="map-swatch map-swatch-{{ value }}" aria-hidden="true"></span>{{ name }}</li>
+        {% endfor %}
+        <li><span class="map-swatch map-swatch-other" aria-hidden="true"></span>Uncertain / other</li>
+        <li><span class="map-swatch map-swatch-boundary" aria-hidden="true"></span>Santa Maria boundary</li>
+        <li><span class="map-swatch-agency" aria-hidden="true"></span>Notify agency station</li>
+      </ul>
+    </div>
+    {% if agency_markers %}
+    <div class="card">
+      <h2 class="eyebrow">Agencies in Santa Maria</h2>
+      <ul class="map-pin-list mt-3">
+        {% for a in agency_markers %}
+        <li>
+          <button type="button" class="map-pin-item" data-agency-id="{{ a.id }}">
+            <span class="map-pin-head">
+              <span class="map-swatch-agency" aria-hidden="true"></span>
+              <strong>{{ a.name }}</strong>
+              <span class="chip">{{ a.type_label }}</span>
+            </span>
+            <span class="muted small block">{% if a.barangay %}{{ a.barangay }}{% endif %}{% if a.barangay and a.phone %} · {% endif %}{% if a.phone %}{{ a.phone }}{% endif %}</span>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <div class="card map-list-card">
+      <h2 class="eyebrow">On the map</h2>
+      {% if markers %}
+      <ul class="map-pin-list mt-3" id="map-pin-list">
+        {% for m in markers %}
+        <li>
+          <button type="button" class="map-pin-item" data-marker-id="{{ m.id }}">
+            <span class="map-pin-head">
+              <span class="map-dot" style="background: {{ m.color }}" aria-hidden="true"></span>
+              <strong>{{ m.record }}</strong>
+              <span class="chip">{{ m.label_name }}</span>
+            </span>
+            <span class="muted small block">{{ m.status_label }} · {{ m.when }}</span>
+            {% if m.location %}<span class="loc-text block">{{ m.location }}</span>{% endif %}
+          </button>
+          <a class="map-pin-open muted small" href="{{ m.url }}">Open record</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted small mt-3">Nothing to list yet.</p>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>EIC.initHistory();</script>
+{% if google_maps_api_key %}
+<script>
+  window.initEICIncidentMap = function () {
+    if (window.EIC && typeof EIC.initIncidentMap === "function") EIC.initIncidentMap();
+  };
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initEICIncidentMap" async defer></script>
+{% endif %}
+{% endblock %}

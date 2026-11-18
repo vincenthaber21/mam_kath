@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block description %}{{ subtitle }}{% endblock %}
+{% block content %}
+<div class="page-header split">
+  <div class="row">
+    <a href="{% url 'user_list' %}" class="back-link">← Users</a>
+    <h1 class="h1">{{ title }}</h1>
+  </div>
+  <p class="muted small">{{ subtitle }}</p>
+</div>
+
+<form method="post" class="card stack" style="max-width: 560px" novalidate>
+  {% csrf_token %}
+  {% for e in form.non_field_errors %}<p class="error" role="alert">{{ e }}</p>{% endfor %}
+
+  <div>
+    <label for="{{ form.username.id_for_label }}" class="eyebrow">Username</label>
+    {{ form.username }}
+    {% if form.username.help_text %}<p class="muted xs mt-1">{{ form.username.help_text }}</p>{% endif %}
+    {% for e in form.username.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+  <div>
+    <label for="{{ form.email.id_for_label }}" class="eyebrow">Email</label>
+    {{ form.email }}
+    {% for e in form.email.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+
+  <div>
+    <p class="eyebrow">Name</p>
+    <p class="muted xs mt-1">Each part is normalized to Title Case. Middle name is optional.</p>
+    <div class="stack mt-3">
+      <div>
+        <label for="{{ form.last_name.id_for_label }}" class="muted small">Last name</label>
+        {{ form.last_name }}
+        {% for e in form.last_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+      </div>
+      <div>
+        <label for="{{ form.first_name.id_for_label }}" class="muted small">First name</label>
+        {{ form.first_name }}
+        {% for e in form.first_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+      </div>
+      <div>
+        <label for="{{ form.middle_name.id_for_label }}" class="muted small">Middle name</label>
+        {{ form.middle_name }}
+        {% for e in form.middle_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <label for="{{ form.role.id_for_label }}" class="eyebrow">Role</label>
+    {{ form.role }}
+    {% if form.role.help_text %}<p class="muted xs mt-1">{{ form.role.help_text }}</p>{% endif %}
+    {% for e in form.role.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+  <div>
+    <label for="{{ form.phone.id_for_label }}" class="eyebrow">Phone</label>
+    {{ form.phone }}
+    {% for e in form.phone.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+  <div>
+    <label for="{{ form.barangay.id_for_label }}" class="eyebrow">Barangay / area</label>
+    {{ form.barangay }}
+    {% for e in form.barangay.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+
+  {% if form.password1 %}
+  <div>
+    <label for="{{ form.password1.id_for_label }}" class="eyebrow">{{ form.password1.label }}</label>
+    {{ form.password1 }}
+    {% if form.password1.help_text %}<p class="muted xs mt-1">{{ form.password1.help_text }}</p>{% endif %}
+    {% for e in form.password1.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+  <div>
+    <label for="{{ form.password2.id_for_label }}" class="eyebrow">{{ form.password2.label }}</label>
+    {{ form.password2 }}
+    {% for e in form.password2.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <label class="check">{{ form.is_active }} {{ form.is_active.label }}</label>
+  {% if form.is_active.help_text %}<p class="muted xs">{{ form.is_active.help_text }}</p>{% endif %}
+  {% for e in form.is_active.errors %}<p class="error">{{ e }}</p>{% endfor %}
+
+  <div class="row end mt-2">
+    <a href="{% url 'user_list' %}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary">{% if edited_user %}Save changes{% else %}Create account{% endif %}</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script>EIC.initUserForm();</script>{% endblock %}

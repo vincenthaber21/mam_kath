@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from "./src/AuthContext";
 import CaptureScreen from "./src/screens/CaptureScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import RegisterScreen from "./src/screens/RegisterScreen";
 import ResultScreen from "./src/screens/ResultScreen";
 import { colors } from "./src/theme";
 
@@ -115,6 +116,16 @@ function Root() {
         options={{
           presentation: "modal",
           title: "Account",
+          headerStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
+        }}
+      />
+      <RootStack.Screen
+        name="Register"
+        component={RegisterScreen}
+        options={{
+          presentation: "modal",
+          title: "Create account",
           headerStyle: { backgroundColor: colors.bg },
           headerShadowVisible: false,
         }}

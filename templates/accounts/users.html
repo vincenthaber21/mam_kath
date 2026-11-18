@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block description %}Manage officers and residents who report and respond to incidents.{% endblock %}
+{% block content %}
+<div class="page-header split">
+  <div>
+    <h1 class="h1">Users</h1>
+    <p class="subtitle">Officers monitor and respond; residents upload incident reports.</p>
+  </div>
+  <button type="button" class="btn btn-primary" id="user-create-open">Add user</button>
+</div>
+
+<div class="grid grid-4 mb-6">
+  <div class="card"><p class="eyebrow">All accounts</p><p class="kpi">{{ counts.all }}</p></div>
+  <div class="card"><p class="eyebrow">Officers</p><p class="kpi">{{ counts.officer }}</p></div>
+  <div class="card"><p class="eyebrow">Residents</p><p class="kpi">{{ counts.resident }}</p></div>
+  <div class="card"><p class="eyebrow">Administrators</p><p class="kpi">{{ counts.admin }}</p></div>
+</div>
+
+<form method="get" class="card mb-6 filters" id="filters">
+  <div>
+    <label for="search" class="eyebrow">Search</label>
+    <input id="search" name="search" class="field mt-2" placeholder="Username, name, email, phone, barangay" value="{{ search }}">
+  </div>
+  <div>
+    <label for="role" class="eyebrow">Role</label>
+    <select id="role" name="role" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      {% for value, label in roles %}
+        <option value="{{ value }}" {% if role == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filters-actions">
+    <noscript><button type="submit" class="btn btn-outline">Apply</button></noscript>
+    {% if search or role %}<a class="btn btn-outline" href="{% url 'user_list' %}">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="card">
+  {% if not page.object_list %}
+    {% include "partials/empty.html" with title="No users match these filters" text="Add an officer or resident account, or clear the filters." %}
+  {% else %}
+  <div class="table-scroll">
+    <table class="table min-760">
+      <caption class="sr-only">Managed users</caption>
+      <thead><tr>
+        <th scope="col">Name</th>
+        <th scope="col">Role</th>
+        <th scope="col">Barangay</th>
+        <th scope="col">Status</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody>
+      {% for u in page.object_list %}
+        <tr>
+          <td>
+            <span class="block">{{ u.formal_name }}</span>
+            <span class="muted small">@{{ u.username }} · {{ u.email }}{% if u.phone %} · {{ u.phone }}{% endif %}</span>
+          </td>
+          <td><span class="chip">{{ u.role_label }}</span></td>
+          <td>{% if u.barangay %}{{ u.barangay }}{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{% if u.is_active %}<span class="success">Active</span>{% else %}<span class="danger">Disabled</span>{% endif %}</td>
+          <td><a class="btn btn-outline btn-sm" href="{% url 'user_edit' u.pk %}">Edit</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <div class="pager mt-3">
+    <span class="muted small">Showing {% if page.paginator.count %}{{ page.start_index }}–{{ page.end_index }}{% else %}0–0{% endif %} of {{ page.paginator.count }}</span>
+    <div class="row">
+      {% if page.has_previous %}<a class="btn btn-outline btn-sm" href="?page={{ page.previous_page_number }}{% if query %}&amp;{{ query }}{% endif %}">Previous</a>{% endif %}
+      {% if page.has_next %}<a class="btn btn-outline btn-sm" href="?page={{ page.next_page_number }}{% if query %}&amp;{{ query }}{% endif %}">Next</a>{% endif %}
+    </div>
+  </div>
+</div>
+
+<dialog id="user-create-dialog" class="dialog dialog-user" aria-labelledby="user-create-title"{% if create_open %} data-open{% endif %}>
+  <form method="post" action="{% url 'user_list' %}" class="stack" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="intent" value="create">
+    <div>
+      <h2 class="h2" id="user-create-title">Add user</h2>
+      <p class="muted small mt-1">Create an officer or resident account for incident reporting and response.</p>
+    </div>
+    {% for e in create_form.non_field_errors %}<p class="error" role="alert">{{ e }}</p>{% endfor %}
+
+    <div>
+      <label for="{{ create_form.username.id_for_label }}" class="eyebrow">Username</label>
+      {{ create_form.username }}
+      {% if create_form.username.help_text %}<p class="muted xs mt-1">{{ create_form.username.help_text }}</p>{% endif %}
+      {% for e in create_form.username.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.email.id_for_label }}" class="eyebrow">Email</label>
+      {{ create_form.email }}
+      {% for e in create_form.email.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+
+    <div>
+      <p class="eyebrow">Name</p>
+      <p class="muted xs mt-1">Normalized to Title Case. Middle name is optional.</p>
+      <div class="stack mt-3">
+        <div>
+          <label for="{{ create_form.last_name.id_for_label }}" class="muted small">Last name</label>
+          {{ create_form.last_name }}
+          {% for e in create_form.last_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+        </div>
+        <div>
+          <label for="{{ create_form.first_name.id_for_label }}" class="muted small">First name</label>
+          {{ create_form.first_name }}
+          {% for e in create_form.first_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+        </div>
+        <div>
+          <label for="{{ create_form.middle_name.id_for_label }}" class="muted small">Middle name</label>
+          {{ create_form.middle_name }}
+          {% for e in create_form.middle_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label for="{{ create_form.role.id_for_label }}" class="eyebrow">Role</label>
+      {{ create_form.role }}
+      {% if create_form.role.help_text %}<p class="muted xs mt-1">{{ create_form.role.help_text }}</p>{% endif %}
+      {% for e in create_form.role.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.phone.id_for_label }}" class="eyebrow">Phone</label>
+      {{ create_form.phone }}
+      {% for e in create_form.phone.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.barangay.id_for_label }}" class="eyebrow">Barangay / area</label>
+      {{ create_form.barangay }}
+      {% for e in create_form.barangay.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.password1.id_for_label }}" class="eyebrow">{{ create_form.password1.label }}</label>
+      {{ create_form.password1 }}
+      {% if create_form.password1.help_text %}<p class="muted xs mt-1">{{ create_form.password1.help_text }}</p>{% endif %}
+      {% for e in create_form.password1.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.password2.id_for_label }}" class="eyebrow">{{ create_form.password2.label }}</label>
+      {{ create_form.password2 }}
+      {% for e in create_form.password2.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+
+    <label class="check">{{ create_form.is_active }} {{ create_form.is_active.label }}</label>
+    {% if create_form.is_active.help_text %}<p class="muted xs">{{ create_form.is_active.help_text }}</p>{% endif %}
+    {% for e in create_form.is_active.errors %}<p class="error">{{ e }}</p>{% endfor %}
+
+    <div class="row end">
+      <button type="button" class="btn btn-outline" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Create account</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script>EIC.initUsers();</script>{% endblock %}

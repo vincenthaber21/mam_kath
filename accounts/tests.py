@@ -9,8 +9,8 @@ class FrontPageTests(TestCase):
     def test_front_page_is_public_and_explains_the_workflow(self):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "From incident photo")
-        self.assertContains(response, "How the classifier works")
+        self.assertContains(response, "Classify incident photos with measured confidence")
+        self.assertContains(response, "Three steps from photo to verified record")
         self.assertContains(response, "Human verification required")
         self.assertContains(response, reverse("classify"))
         self.assertContains(response, "No classification yet")

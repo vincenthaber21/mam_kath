@@ -1,6 +1,6 @@
 from django import template
 
-from classifier.labels import LABEL_SHORT, label_name as _label_name
+from classifier.labels import LABEL_SHORT, display_prediction as _display_prediction, label_name as _label_name
 
 register = template.Library()
 
@@ -23,6 +23,14 @@ def fixed2(value):
 
 
 @register.filter
+def signed_points(value):
+    """0.012 -> "+1.2 pts" (accuracy gap in percentage points)."""
+    if value is None or value == "":
+        return "—"
+    return f"{float(value) * 100:+.1f} pts"
+
+
+@register.filter
 def ms(value):
     if value is None or value == "":
         return "—"
@@ -32,6 +40,11 @@ def ms(value):
 @register.filter
 def label_name(value):
     return _label_name(value)
+
+
+@register.filter
+def prediction_label(rec):
+    return _display_prediction(rec)
 
 
 @register.filter

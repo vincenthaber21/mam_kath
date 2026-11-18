@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load eic %}
+{% block title %}Dashboard{% endblock %}
+{% block description %}Monitor incident volume, response status, and reports that need attention.{% endblock %}
+{% block content %}
+<div class="dashboard-page">
+  <div class="page-header split">
+    <div>
+      <p class="eyebrow">Overview</p>
+      <h1 class="h1">Dashboard</h1>
+      <p class="subtitle">
+        {% if can_monitor %}
+          Live snapshot of reports and response status for quick monitoring.
+        {% else %}
+          A simple view of your submitted incident reports.
+        {% endif %}
+        Updated {{ today|date:"M j, Y" }}.
+      </p>
+    </div>
+    <div class="dashboard-actions">
+      <a class="btn btn-outline" href="{% url 'history' %}">Incidents</a>
+      <a class="btn btn-outline" href="{% url 'incident_map' %}">Map</a>
+      <a class="btn btn-primary" href="{% url 'classify' %}">Classify</a>
+    </div>
+  </div>
+
+  <div class="dashboard-kpis">
+    <a class="dash-kpi" href="{% url 'history' %}">
+      <p class="eyebrow">Total reports</p>
+      <p class="kpi">{{ counts.total }}</p>
+      <p class="muted small">{{ counts.today }} today</p>
+    </a>
+    <a class="dash-kpi dash-kpi-pending" href="{% url 'history' %}?response_status=open">
+      <p class="eyebrow">Pending</p>
+      <p class="kpi">{{ counts.pending }}</p>
+      <p class="muted small">Awaiting action</p>
+    </a>
+    <a class="dash-kpi dash-kpi-active" href="{% url 'history' %}?response_status=responding">
+      <p class="eyebrow">Responding</p>
+      <p class="kpi">{{ counts.responding }}</p>
+      <p class="muted small">{{ counts.acknowledged }} acknowledged</p>
+    </a>
+    <a class="dash-kpi dash-kpi-done" href="{% url 'history' %}?response_status=resolved">
+      <p class="eyebrow">Completed</p>
+      <p class="kpi">{{ counts.completed }}</p>
+      <p class="muted small">Resolved or closed</p>
+    </a>
+  </div>
+
+  <div class="dashboard-meta">
+    <div class="dash-chip"><strong>{{ counts.with_barangay }}</strong> with barangay</div>
+    <div class="dash-chip"><strong>{{ counts.with_gps }}</strong> with GPS</div>
+    <div class="dash-chip"><strong>{{ counts.uncertain }}</strong> uncertain</div>
+    <a class="dash-chip dash-chip-link" href="{% url 'incident_map' %}">Open map →</a>
+  </div>
+
+  <div class="dashboard-grid">
+    <section class="card">
+      <div class="row between">
+        <h2 class="eyebrow">By category</h2>
+        <a class="muted small" href="{% url 'history' %}">View all</a>
+      </div>
+      <ul class="dash-bars mt-4">
+        {% for c in categories %}
+        <li>
+          <div class="bar-head">
+            <span>{{ c.name }}</span>
+            <span class="num">{{ c.count }}</span>
+          </div>
+          <div class="track" role="meter" aria-label="{{ c.name }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ c.pct }}">
+            <div class="fill fill-brand dash-fill-{{ c.key }}" style="width: {{ c.pct }}%"></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h2 class="eyebrow">By response</h2>
+        <a class="muted small" href="{% url 'history' %}">Filter list</a>
+      </div>
+      <ul class="dash-status mt-4">
+        {% for row in response_rows %}
+        <li>
+          <a href="{% url 'history' %}?response_status={{ row.key }}">
+            <span class="badge badge-status-{{ row.key }}">{{ row.name }}</span>
+            <span class="dash-status-count">{{ row.count }}</span>
+            <span class="muted small">{{ row.pct }}%</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <section class="card dashboard-barangay">
+    <div class="row between">
+      <div>
+        <h2 class="eyebrow">By barangay</h2>
+        <p class="muted small mt-1">Top 10 barangays with the most incidents</p>
+      </div>
+      <a class="muted small" href="{% url 'history' %}">Search incidents</a>
+    </div>
+    {% if barangay_rows %}
+    <ul class="dash-hbar mt-4" role="list">
+      {% for row in barangay_rows %}
+      <li>
+        <a class="dash-hbar-row" href="{% url 'history' %}?search={{ row.name|urlencode }}">
+          <span class="dash-hbar-label">{{ row.name }}</span>
+          <span class="dash-hbar-track" role="meter" aria-label="{{ row.name }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ row.pct }}">
+            <span class="dash-hbar-fill" style="width: {{ row.pct }}%"></span>
+          </span>
+          <span class="dash-hbar-count">{{ row.count }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="dash-empty mt-4">
+      <p class="muted">No barangay locations recorded yet.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <div class="dashboard-grid dashboard-grid-lists">
+    <section class="card">
+      <div class="row between">
+        <div>
+          <h2 class="eyebrow">Needs attention</h2>
+          <p class="muted small mt-1">Pending, acknowledged, or responding</p>
+        </div>
+        <a class="btn btn-outline btn-sm" href="{% url 'history' %}?response_status=open">Open pending</a>
+      </div>
+      {% if attention %}
+      <ul class="dash-list mt-4">
+        {% for c in attention %}
+        <li>
+          <a class="dash-list-item" href="{% url 'result' c.pk %}">
+            <span class="dash-list-main">
+              <strong>{{ c.record_no }}</strong>
+              {% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% else %}<span class="chip chip-muted">{{ c|prediction_label }}</span>{% endif %}
+              {% if c.predicted_label %}<span class="badge badge-status-{{ c.response_status }}">{{ c.response_status_label }}</span>{% endif %}
+            </span>
+            <span class="dash-list-meta muted small">
+              {% if c.location_text %}<span class="dash-barangay">{{ c.location_text }}</span> · {% else %}<span class="dash-barangay muted">No barangay</span> · {% endif %}{{ c.created_at|date:"M j, g:i A" }}
+            </span>
+          </a>
+          {% if can_monitor and c.predicted_label and c.response_status != "responding" %}
+          <form method="post" action="{% url 'incident_respond' c.pk %}" class="dash-quick-action">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="responding">
+            <input type="hidden" name="next" value="{% url 'dashboard' %}">
+            <button type="submit" class="btn btn-primary btn-sm">Responding</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="dash-empty mt-4">
+        <p class="muted">Nothing needs attention right now.</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <div>
+          <h2 class="eyebrow">Latest reports</h2>
+          <p class="muted small mt-1">Most recent submissions</p>
+        </div>
+        <a class="btn btn-outline btn-sm" href="{% url 'history' %}">Full list</a>
+      </div>
+      {% if recent %}
+      <ul class="dash-list mt-4">
+        {% for c in recent %}
+        <li>
+          <a class="dash-list-item" href="{% url 'result' c.pk %}">
+            <span class="dash-list-main">
+              <strong>{{ c.record_no }}</strong>
+              {% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% else %}<span class="chip chip-muted">{{ c|prediction_label }}</span>{% endif %}
+              {% if c.predicted_label %}<span class="badge badge-status-{{ c.response_status }}">{{ c.response_status_label }}</span>{% endif %}
+            </span>
+            <span class="dash-list-meta muted small">
+              {% if c.location_text %}<span class="dash-barangay">{{ c.location_text }}</span> · {% else %}<span class="dash-barangay muted">No barangay</span> · {% endif %}{% if c.user %}{{ c.user.display_name }} · {% endif %}{{ c.created_at|date:"M j, g:i A" }}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="dash-empty mt-4">
+        <p class="muted">No reports yet.</p>
+        <a class="btn btn-primary btn-sm mt-3" href="{% url 'classify' %}">Classify an image</a>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

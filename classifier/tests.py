@@ -28,7 +28,13 @@ def fake_keras(meta, img):
 
 class Base(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("reviewer@example.com", "pass-1234-word", name="Reviewer")
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            "reviewer@example.com",
+            "pass-1234-word",
+            name="Reviewer",
+            role=User.Role.OFFICER,
+        )
         self.client.force_login(self.user)
 
 
@@ -58,10 +64,51 @@ class ClassifyTests(Base):
         self.assertEqual(rec.model, self.model)
         self.assertTrue(rec.is_match)
 
+    def test_classify_page_lists_santa_maria_barangays(self):
+        self.user.barangay = "Lingsat"
+        self.user.save(update_fields=["barangay"])
+        res = self.client.get(reverse("classify"))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, '<select name="location_text"')
+        self.assertContains(res, "Ag-agrao")
+        self.assertContains(res, "Poblacion Norte")
+        self.assertContains(res, "Tinaan")
+        self.assertContains(res, 'value="Lingsat" selected')
+
+    def test_nearest_barangay_from_gps(self):
+        from .locations import nearest_barangay
+
+        self.assertEqual(nearest_barangay(17.3769, 120.4540), "Lingsat")
+        self.assertEqual(nearest_barangay(17.3651, 120.4815), "Poblacion Sur")
+        self.assertEqual(nearest_barangay(0, 0), "")
+
+    @mock.patch.object(services, "_keras_predict", side_effect=fake_keras)
+    def test_classify_saves_location_fields(self, _):
+        res = self.client.post(
+            reverse("classify"),
+            {
+                "image": SimpleUploadedFile("a.jpg", image_bytes()),
+                "notes": "Smoke near the stalls",
+                "location_text": "Poblacion Norte",
+                "latitude": "17.35712",
+                "longitude": "120.49634",
+            },
+        )
+        rec = Classification.objects.get()
+        self.assertRedirects(res, reverse("result", args=[rec.pk]))
+        self.assertEqual(rec.notes, "Smoke near the stalls")
+        self.assertEqual(rec.location_text, "Poblacion Norte")
+        self.assertAlmostEqual(rec.latitude, 17.35712)
+        self.assertAlmostEqual(rec.longitude, 120.49634)
+        self.assertEqual(rec.source, "web")
+
     @mock.patch.object(services, "_keras_predict", return_value=(np.array([0.55, 0.15, 0.1, 0.1, 0.1]), 5.0))
-    def test_below_60_percent_is_low_confidence(self, _):
+    def test_below_threshold_is_not_assigned_a_category(self, _):
         self.post(image_bytes())
-        self.assertTrue(Classification.objects.get().low_confidence)
+        rec = Classification.objects.get()
+        self.assertTrue(rec.low_confidence)
+        self.assertEqual(rec.predicted_label, "")
+        self.assertAlmostEqual(rec.scores["fire"], 0.55)
 
     def test_gif_is_rejected_and_logged_as_failed(self):
         self.post(image_bytes("GIF"), name="a.gif")
@@ -138,6 +185,91 @@ class DemoAndLogTests(Base):
         self.assertEqual(res.context["page"].paginator.count, 1)
         csv_text = self.client.get(reverse("history_export"), {"predicted": "crime"}).content.decode()
         self.assertEqual(len(csv_text.strip().splitlines()), 1 + 13)
+
+    def test_history_shows_saved_location(self):
+        Classification.objects.create(
+            predicted_label="fire",
+            confidence=0.9,
+            filename="plaza.jpg",
+            location_text="Santa Maria plaza",
+            latitude=17.357,
+            longitude=120.496,
+        )
+        res = self.client.get(reverse("history"))
+        self.assertContains(res, "Santa Maria plaza")
+        self.assertContains(res, "17.35700")
+        self.assertContains(res, "google.com/maps")
+
+    def test_history_search_matches_location(self):
+        Classification.objects.create(predicted_label="fire", confidence=0.9, filename="a.jpg", location_text="Near the market")
+        Classification.objects.create(predicted_label="crime", confidence=0.8, filename="b.jpg", location_text="Highway bridge")
+        res = self.client.get(reverse("history"), {"search": "market"})
+        self.assertEqual(res.context["page"].paginator.count, 1)
+        self.assertContains(res, "Near the market")
+
+    def test_dashboard_shows_monitoring_counts(self):
+        Classification.objects.create(
+            predicted_label="fire",
+            confidence=0.9,
+            filename="a.jpg",
+            response_status="open",
+            location_text="Poblacion Norte",
+            latitude=17.35,
+            longitude=120.49,
+        )
+        Classification.objects.create(
+            predicted_label="crime",
+            confidence=0.8,
+            filename="b.jpg",
+            response_status="responding",
+            location_text="Suso",
+        )
+        Classification.objects.create(
+            predicted_label="accident",
+            confidence=0.7,
+            filename="c.jpg",
+            response_status="resolved",
+        )
+        res = self.client.get(reverse("dashboard"))
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["counts"]["total"], 3)
+        self.assertEqual(res.context["counts"]["pending"], 1)
+        self.assertEqual(res.context["counts"]["responding"], 1)
+        self.assertEqual(res.context["counts"]["completed"], 1)
+        self.assertEqual(res.context["counts"]["with_gps"], 1)
+        self.assertEqual(res.context["counts"]["with_barangay"], 2)
+        self.assertEqual(len(res.context["barangay_rows"]), 2)
+        self.assertContains(res, "Needs attention")
+        self.assertContains(res, "Top 10 barangays")
+        self.assertContains(res, "Poblacion Norte")
+        self.assertContains(res, "Suso")
+
+    @override_settings(GOOGLE_MAPS_API_KEY="test-maps-key")
+    def test_incident_map_shows_geolocated_pins(self):
+        Classification.objects.create(
+            predicted_label="fire",
+            confidence=0.9,
+            filename="plaza.jpg",
+            location_text="Santa Maria plaza",
+            latitude=17.357,
+            longitude=120.496,
+        )
+        Classification.objects.create(
+            predicted_label="crime",
+            confidence=0.8,
+            filename="no-gps.jpg",
+            location_text="No coordinates",
+        )
+        res = self.client.get(reverse("incident_map"))
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["mapped_count"], 1)
+        self.assertEqual(res.context["unmapped_count"], 1)
+        self.assertContains(res, "Santa Maria plaza")
+        self.assertContains(res, "maps.googleapis.com/maps/api/js?key=test-maps-key")
+        self.assertContains(res, "incident-map-markers")
+        self.assertContains(res, "incident-map-boundary")
+        self.assertContains(res, "Santa Maria boundary")
+        self.assertGreaterEqual(len(res.context["map_boundary"]), 3)
 
 
 LABEL_ORDER = ["fire", "crime", "medical_emergency", "accident", "disaster"]

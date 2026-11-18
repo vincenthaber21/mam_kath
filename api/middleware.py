@@ -41,7 +41,7 @@ class CorsMiddleware:
         else:
             return
         response["Access-Control-Allow-Headers"] = (
-            "Authorization, Content-Type, Accept, X-Requested-With"
+            "Authorization, Content-Type, Accept, X-Requested-With, X-EIC-Token, X-Tunnel-Authorization"
         )
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         response["Access-Control-Max-Age"] = "86400"

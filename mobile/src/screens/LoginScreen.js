@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -12,56 +11,30 @@ import {
   View,
 } from "react-native";
 
-import { ping } from "../api";
 import { useAuth } from "../AuthContext";
-import { DEFAULT_API_URL, getApiUrl, loadApiUrl, setApiUrl } from "../config";
 import { colors, spacing } from "../theme";
 
 export default function LoginScreen({ navigation }) {
-  const { signIn, signOut, isSignedIn, user } = useAuth();
-  const [email, setEmail] = useState("");
+  const { signIn, signOut, clearSession, isSignedIn, user } = useAuth();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [apiField, setApiField] = useState(DEFAULT_API_URL);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [testing, setTesting] = useState(false);
-
-  useEffect(() => {
-    loadApiUrl().then((url) => setApiField(url));
-  }, []);
-
-  async function applyApiUrl() {
-    const next = await setApiUrl(apiField);
-    setApiField(next);
-    return next;
-  }
-
-  async function onTest() {
-    setError("");
-    setStatus("");
-    setTesting(true);
-    try {
-      await applyApiUrl();
-      const data = await ping();
-      setStatus(`Connected ✓ ${data.service || "eic-api"}`);
-    } catch (err) {
-      setError(err.message || "Connection failed.");
-    } finally {
-      setTesting(false);
-    }
-  }
 
   async function onSubmit() {
+    const id = identifier.trim();
+    if (!id || !password) {
+      setError("Enter your username or email and password.");
+      return;
+    }
     setError("");
-    setStatus("");
     setBusy(true);
     try {
-      await applyApiUrl();
-      await signIn(email, password);
+      await signIn(id, password);
       if (navigation?.canGoBack?.()) navigation.goBack();
     } catch (err) {
-      setError(err.message || "Could not sign in.");
+      setError(err.message || "Could not sign in. Check your details and try again.");
     } finally {
       setBusy(false);
     }
@@ -69,12 +42,15 @@ export default function LoginScreen({ navigation }) {
 
   async function onContinueAsGuest() {
     setError("");
+    setBusy(true);
     try {
-      await applyApiUrl();
-    } catch {
-      // still allow continuing with previous URL
+      if (isSignedIn) await clearSession();
+      if (navigation?.canGoBack?.()) navigation.goBack();
+    } catch (err) {
+      setError(err.message || "Could not continue.");
+    } finally {
+      setBusy(false);
     }
-    if (navigation?.canGoBack?.()) navigation.goBack();
   }
 
   async function onSignOut() {
@@ -89,96 +65,166 @@ export default function LoginScreen({ navigation }) {
     }
   }
 
-  const siteRoot = getApiUrl().replace(/\/api$/i, "");
-
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.hero}>
           <Text style={styles.brand}>EIC</Text>
-          <Text style={styles.title}>Incident Reporter</Text>
+          <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>
-            Report without an account, or sign in to keep your reports under your name.
+            Sign in to save reports under your name, or continue as a guest.
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>API URL (Dev Tunnel)</Text>
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={apiField}
-            onChangeText={setApiField}
-            placeholder={DEFAULT_API_URL}
-            placeholderTextColor={colors.muted}
-          />
-          <View style={styles.row}>
-            <Pressable style={styles.secondary} onPress={onTest} disabled={testing || busy}>
-              {testing ? (
-                <ActivityIndicator color={colors.brand} />
-              ) : (
-                <Text style={styles.secondaryText}>Test connection</Text>
-              )}
-            </Pressable>
-            <Pressable
-              style={styles.secondary}
-              onPress={() => Linking.openURL(siteRoot || DEFAULT_API_URL.replace(/\/api$/i, ""))}
-            >
-              <Text style={styles.secondaryText}>Open in browser</Text>
-            </Pressable>
-          </View>
-
           {isSignedIn ? (
             <>
-              <Text style={[styles.signedIn, styles.mt]}>
-                Signed in as {user?.name || user?.email}
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {(user?.name || user?.username || user?.email || "?")
+                    .charAt(0)
+                    .toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.signedInLabel}>Signed in</Text>
+              <Text style={styles.signedInName}>
+                {user?.name || user?.username || user?.email}
               </Text>
-              {status ? <Text style={styles.ok}>{status}</Text> : null}
+              {user?.email && user?.name ? (
+                <Text style={styles.signedInEmail}>{user.email}</Text>
+              ) : null}
+
               {error ? <Text style={styles.error}>{error}</Text> : null}
-              <Pressable style={[styles.btn, busy && styles.btnDisabled]} onPress={onSignOut} disabled={busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Sign out</Text>}
+
+              <Pressable
+                style={[styles.btn, busy && styles.btnDisabled]}
+                onPress={onSignOut}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.btnText}>Sign out</Text>
+                )}
               </Pressable>
-              <Pressable style={styles.guestBtn} onPress={onContinueAsGuest} disabled={busy}>
+              <Pressable
+                style={[styles.guestBtn, busy && styles.btnDisabled]}
+                onPress={onContinueAsGuest}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Back to reporting"
+              >
                 <Text style={styles.guestText}>Back to reporting</Text>
               </Pressable>
             </>
           ) : (
             <>
-              <Text style={[styles.label, styles.mt]}>Email</Text>
+              <Text style={styles.label}>Username or email</Text>
               <TextInput
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="username"
+                textContentType="username"
                 keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
+                returnKeyType="next"
+                value={identifier}
+                onChangeText={(v) => {
+                  setIdentifier(v);
+                  if (error) setError("");
+                }}
+                placeholder="username or you@example.com"
                 placeholderTextColor={colors.muted}
+                editable={!busy}
+                accessibilityLabel="Username or email"
               />
+
               <Text style={[styles.label, styles.mt]}>Password</Text>
-              <TextInput
-                style={styles.input}
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor={colors.muted}
-              />
-              {status ? <Text style={styles.ok}>{status}</Text> : null}
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={styles.passwordInput}
+                  secureTextEntry={!showPassword}
+                  autoComplete="password"
+                  textContentType="password"
+                  returnKeyType="go"
+                  value={password}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    if (error) setError("");
+                  }}
+                  onSubmitEditing={onSubmit}
+                  placeholder="Enter your password"
+                  placeholderTextColor={colors.muted}
+                  editable={!busy}
+                  accessibilityLabel="Password"
+                />
+                <Pressable
+                  style={styles.showBtn}
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                >
+                  <Text style={styles.showBtnText}>{showPassword ? "Hide" : "Show"}</Text>
+                </Pressable>
+              </View>
+
               {error ? <Text style={styles.error}>{error}</Text> : null}
-              <Pressable style={[styles.btn, busy && styles.btnDisabled]} onPress={onSubmit} disabled={busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Sign in</Text>}
+
+              <Pressable
+                style={[styles.btn, busy && styles.btnDisabled]}
+                onPress={onSubmit}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in"
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.btnText}>Sign in</Text>
+                )}
               </Pressable>
-              <Pressable style={styles.guestBtn} onPress={onContinueAsGuest} disabled={busy}>
-                <Text style={styles.guestText}>Continue without signing in</Text>
+
+              <Pressable
+                style={[styles.registerBtn, busy && styles.btnDisabled]}
+                onPress={() => navigation.navigate("Register")}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Create resident account"
+              >
+                <Text style={styles.registerText}>Create resident account</Text>
+              </Pressable>
+              <Text style={styles.registerHint}>
+                For residents of Santa Maria, Ilocos Sur
+              </Text>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <Pressable
+                style={[styles.guestBtn, busy && styles.btnDisabled]}
+                onPress={onContinueAsGuest}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Continue without signing in"
+              >
+                <Text style={styles.guestText}>Continue as guest</Text>
               </Pressable>
               <Text style={styles.hint}>
-                Guest reports still go to the classification log. Sign in if you want them linked to your
-                account and listed under My reports.
+                Guests can still submit incident reports. Sign in later to attach them to your
+                account.
               </Text>
             </>
           )}
@@ -190,60 +236,179 @@ export default function LoginScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.brand },
-  scroll: { flexGrow: 1, justifyContent: "center", padding: spacing.lg, paddingVertical: 40 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: spacing.lg,
+    paddingVertical: 48,
+  },
   hero: { marginBottom: spacing.lg },
-  brand: { color: "#E8F5EF", fontSize: 42, fontWeight: "800", letterSpacing: 2 },
-  title: { color: "#fff", fontSize: 26, fontWeight: "700", marginTop: 4 },
-  subtitle: { color: "#C9DED4", fontSize: 15, lineHeight: 22, marginTop: spacing.sm, maxWidth: 320 },
+  brand: {
+    color: "#E8F5EF",
+    fontSize: 40,
+    fontWeight: "800",
+    letterSpacing: 3,
+  },
+  title: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "700",
+    marginTop: 8,
+  },
+  subtitle: {
+    color: "#C9DED4",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: spacing.sm,
+    maxWidth: 320,
+  },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: spacing.lg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  label: { color: colors.muted, fontSize: 13, fontWeight: "600", marginBottom: 6 },
+  label: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
   mt: { marginTop: spacing.md },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 14 : 10,
-    fontSize: 15,
+    paddingVertical: Platform.OS === "ios" ? 14 : 12,
+    fontSize: 16,
     color: colors.text,
     backgroundColor: "#FAFCFA",
   },
-  row: { flexDirection: "row", gap: 8, marginTop: spacing.sm },
-  secondary: {
-    flex: 1,
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
     backgroundColor: "#FAFCFA",
   },
-  secondaryText: { color: colors.brand, fontWeight: "700", fontSize: 13 },
-  signedIn: { color: colors.text, fontSize: 15, fontWeight: "600", lineHeight: 22 },
-  error: { color: colors.danger, marginTop: spacing.sm, fontSize: 13, lineHeight: 18 },
-  ok: { color: colors.success, marginTop: spacing.sm, fontSize: 13, fontWeight: "700" },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 14 : 12,
+    fontSize: 16,
+    color: colors.text,
+  },
+  showBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  showBtnText: {
+    color: colors.brand,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginBottom: spacing.sm,
+  },
+  avatarText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  signedInLabel: {
+    textAlign: "center",
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  signedInName: {
+    textAlign: "center",
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  signedInEmail: {
+    textAlign: "center",
+    color: colors.muted,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  error: {
+    color: colors.danger,
+    marginTop: spacing.md,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   btn: {
     marginTop: spacing.lg,
     backgroundColor: colors.brand,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: "center",
   },
-  btnDisabled: { opacity: 0.7 },
+  btnDisabled: { opacity: 0.65 },
   btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  registerBtn: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: "#EEF6F1",
+  },
+  registerText: { color: colors.brand, fontSize: 15, fontWeight: "700" },
+  registerHint: {
+    marginTop: 8,
+    color: colors.muted,
+    fontSize: 12,
+    textAlign: "center",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: spacing.lg,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   guestBtn: {
     marginTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: "center",
     backgroundColor: "#FAFCFA",
   },
   guestText: { color: colors.brand, fontSize: 15, fontWeight: "700" },
-  hint: { marginTop: spacing.md, color: colors.muted, fontSize: 11, lineHeight: 16 },
+  hint: {
+    marginTop: spacing.md,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
 });

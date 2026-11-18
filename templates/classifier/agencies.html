@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Notify agencies{% endblock %}
+{% block description %}Maintain the directory of agencies officers can notify about incidents.{% endblock %}
+{% block content %}
+<div class="page-header split">
+  <div>
+    <h1 class="h1">Notify agencies</h1>
+    <p class="subtitle">Contact directory for fire, police, medical, and other response units.</p>
+  </div>
+  <button type="button" class="btn btn-primary" id="agency-create-open">Add agency</button>
+</div>
+
+<div class="grid grid-3 mb-6">
+  <div class="card"><p class="eyebrow">All agencies</p><p class="kpi">{{ counts.all }}</p></div>
+  <div class="card"><p class="eyebrow">Active</p><p class="kpi">{{ counts.active }}</p></div>
+  <div class="card"><p class="eyebrow">Inactive</p><p class="kpi">{{ counts.inactive }}</p></div>
+</div>
+
+<form method="get" class="card mb-6 filters" id="filters">
+  <div>
+    <label for="search" class="eyebrow">Search</label>
+    <input id="search" name="search" class="field mt-2" placeholder="Name, contact, phone, email, barangay" value="{{ search }}">
+  </div>
+  <div>
+    <label for="agency_type" class="eyebrow">Type</label>
+    <select id="agency_type" name="agency_type" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      {% for value, label in agency_types %}
+        <option value="{{ value }}" {% if agency_type == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="status" class="eyebrow">Status</label>
+    <select id="status" name="status" class="field mt-2" data-autosubmit>
+      <option value="">All</option>
+      <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+      <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive</option>
+    </select>
+  </div>
+  <div class="filters-actions">
+    <noscript><button type="submit" class="btn btn-outline">Apply</button></noscript>
+    {% if search or agency_type or status %}<a class="btn btn-outline" href="{% url 'agency_list' %}">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="card">
+  {% if not page.object_list %}
+    {% include "partials/empty.html" with title="No agencies match these filters" text="Add a notify agency, or clear the filters." %}
+  {% else %}
+  <div class="table-scroll">
+    <table class="table min-760">
+      <caption class="sr-only">Notify agencies</caption>
+      <thead><tr>
+        <th scope="col">Agency</th>
+        <th scope="col">Type</th>
+        <th scope="col">Coverage</th>
+        <th scope="col">Location</th>
+        <th scope="col">Status</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody>
+      {% for a in page.object_list %}
+        <tr>
+          <td>
+            <span class="block">{{ a.name }}</span>
+            <span class="muted small">
+              {% if a.contact_name %}{{ a.contact_name }} · {% endif %}
+              {% if a.phone %}{{ a.phone }}{% endif %}
+              {% if a.phone and a.email %} · {% endif %}
+              {% if a.email %}{{ a.email }}{% endif %}
+              {% if not a.phone and not a.email %}<span class="muted">No contact</span>{% endif %}
+            </span>
+          </td>
+          <td><span class="chip">{{ a.agency_type_label }}</span></td>
+          <td>{% if a.barangay %}{{ a.barangay }}{% else %}<span class="muted">—</span>{% endif %}{% if a.address %}<span class="muted small block">{{ a.address }}</span>{% endif %}</td>
+          <td>
+            {% if a.has_location %}
+              <a class="small" href="https://www.google.com/maps?q={{ a.latitude|stringformat:'.6f' }},{{ a.longitude|stringformat:'.6f' }}" target="_blank" rel="noopener">{{ a.latitude|floatformat:5 }}, {{ a.longitude|floatformat:5 }}</a>
+            {% else %}<span class="muted small">Not pinned</span>{% endif %}
+          </td>
+          <td>{% if a.is_active %}<span class="success">Active</span>{% else %}<span class="danger">Inactive</span>{% endif %}</td>
+          <td><a class="btn btn-outline btn-sm" href="{% url 'agency_edit' a.pk %}">Edit</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <div class="pager mt-3">
+    <span class="muted small">Showing {% if page.paginator.count %}{{ page.start_index }}–{{ page.end_index }}{% else %}0–0{% endif %} of {{ page.paginator.count }}</span>
+    <div class="row">
+      {% if page.has_previous %}<a class="btn btn-outline btn-sm" href="?page={{ page.previous_page_number }}{% if query %}&amp;{{ query }}{% endif %}">Previous</a>{% endif %}
+      {% if page.has_next %}<a class="btn btn-outline btn-sm" href="?page={{ page.next_page_number }}{% if query %}&amp;{{ query }}{% endif %}">Next</a>{% endif %}
+    </div>
+  </div>
+</div>
+
+<dialog id="agency-create-dialog" class="dialog dialog-agency" aria-labelledby="agency-create-title"{% if create_open %} data-open{% endif %}>
+  <form method="post" action="{% url 'agency_list' %}" class="stack" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="intent" value="create">
+    <div>
+      <h2 class="h2" id="agency-create-title">Add notify agency</h2>
+      <p class="muted small mt-1">Save contact details so officers know whom to notify for each incident type.</p>
+    </div>
+    {% for e in create_form.non_field_errors %}<p class="error" role="alert">{{ e }}</p>{% endfor %}
+
+    <div>
+      <label for="{{ create_form.name.id_for_label }}" class="eyebrow">Agency name</label>
+      {{ create_form.name }}
+      {% for e in create_form.name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.agency_type.id_for_label }}" class="eyebrow">Type</label>
+      {{ create_form.agency_type }}
+      {% if create_form.agency_type.help_text %}<p class="muted xs mt-1">{{ create_form.agency_type.help_text }}</p>{% endif %}
+      {% for e in create_form.agency_type.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.contact_name.id_for_label }}" class="eyebrow">Contact name</label>
+      {{ create_form.contact_name }}
+      {% for e in create_form.contact_name.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.phone.id_for_label }}" class="eyebrow">Phone</label>
+      {{ create_form.phone }}
+      {% for e in create_form.phone.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.email.id_for_label }}" class="eyebrow">Email</label>
+      {{ create_form.email }}
+      {% for e in create_form.email.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.barangay.id_for_label }}" class="eyebrow">Barangay / coverage</label>
+      {{ create_form.barangay }}
+      {% for e in create_form.barangay.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ create_form.address.id_for_label }}" class="eyebrow">Address</label>
+      {{ create_form.address }}
+      {% for e in create_form.address.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    {% include "classifier/partials_agency_location.html" with f=create_form picker_id="agency-picker-create" %}
+    <div>
+      <label for="{{ create_form.notes.id_for_label }}" class="eyebrow">Notes</label>
+      {{ create_form.notes }}
+      {% for e in create_form.notes.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+
+    <label class="check">{{ create_form.is_active }} {{ create_form.is_active.label }}</label>
+    {% if create_form.is_active.help_text %}<p class="muted xs">{{ create_form.is_active.help_text }}</p>{% endif %}
+    {% for e in create_form.is_active.errors %}<p class="error">{{ e }}</p>{% endfor %}
+
+    <div class="row end">
+      <button type="button" class="btn btn-outline" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Add agency</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>EIC.initAgencies(); EIC.initAgencyLocationFields();</script>
+{% if google_maps_api_key %}
+{{ map_center|json_script:"incident-map-center" }}
+{{ map_boundary|json_script:"incident-map-boundary" }}
+<script>
+  window.initEICAgencyPickers = function () {
+    if (window.EIC && typeof EIC.initAgencyPickers === "function") EIC.initAgencyPickers();
+  };
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initEICAgencyPickers" async defer></script>
+{% endif %}
+{% endblock %}

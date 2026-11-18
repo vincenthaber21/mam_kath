@@ -145,9 +145,13 @@ class Command(BaseCommand):
         for m in trained:
             self.stdout.write(self.style.SUCCESS(
                 f"{m.name}: val acc {m.val_accuracy}, val macro F1 {m.val_macro_f1}, "
-                f"test acc {m.test_accuracy}, {m.size_mb} MB, {m.avg_inference_ms} ms "
-                f"-> registered (id {m.id})"
+                f"test acc {m.test_accuracy}, {m.size_mb} MB, {m.avg_inference_ms} ms, "
+                f"fit: {m.fit.label} -> registered (id {m.id})"
             ))
         if trained and not o["no_activate"]:
-            best = max(trained, key=lambda m: m.val_macro_f1 or 0)
-            self.stdout.write(self.style.SUCCESS(f"\nActive model: {best} (best validation macro F1)."))
+            from registry.training import pick_best
+
+            best = pick_best(trained)
+            self.stdout.write(self.style.SUCCESS(
+                f"\nActive model: {best} (best validation macro F1 among models that do not overfit)."
+            ))

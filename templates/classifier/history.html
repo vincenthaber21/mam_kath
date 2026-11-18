@@ -1,70 +1,195 @@
 {% extends "base.html" %}
 {% load eic %}
-{% block title %}Classification log{% endblock %}
-{% block description %}Every submission with prediction.{% endblock %}
+{% block title %}Incidents{% endblock %}
+{% block description %}Every submitted incident with its prediction.{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="h1">Classification log</h1>
-  <p class="subtitle">Every submission with prediction (Objective 2 records).</p>
-</div>
+<div class="incidents-page">
+  <div class="page-header split">
+    <div>
+      <h1 class="h1">Incidents</h1>
+      <p class="subtitle">
+        {% if request.user.can_monitor_incidents %}
+          Monitor reports as Pending or Responding — use Responding or Cancel on each row.
+        {% else %}
+          Your uploaded incident reports — status shows Pending or Responding as officers update them.
+        {% endif %}
+      </p>
+    </div>
+    <a class="btn btn-outline" href="{% url 'incident_map' %}{% if query %}?{{ query }}{% endif %}">Map view</a>
+  </div>
 
-<form method="get" class="card mb-6 filters" id="filters">
-  <div>
-    <label for="search" class="eyebrow">Search</label>
-    <input id="search" name="search" class="field mt-2" placeholder="Record # or filename" value="{{ filters.search }}">
-  </div>
-  <div>
-    <label for="predicted" class="eyebrow">Predicted</label>
-    <select id="predicted" name="predicted" class="field mt-2" data-autosubmit>
-      <option value="">All</option>
-      {% for value, name in labels %}<option value="{{ value }}" {% if filters.predicted == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
-    </select>
-  </div>
-  <div>
-    <label for="status" class="eyebrow">Status</label>
-    <select id="status" name="status" class="field mt-2" data-autosubmit>
-      <option value="">All</option>
-      <option value="success" {% if filters.status == "success" %}selected{% endif %}>Success</option>
-      <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
-    </select>
-  </div>
-  <div>
-    <label for="date" class="eyebrow">Date</label>
-    <input id="date" name="date" type="date" class="field mt-2" value="{{ filters.date }}" data-autosubmit>
-  </div>
-  <div class="filters-actions">
-    <noscript><button type="submit" class="btn btn-outline">Apply</button></noscript>
-    <a class="btn btn-outline" href="{% url 'history_export' %}{% if query %}?{{ query }}{% endif %}">Export CSV</a>
-  </div>
-</form>
+  <form method="get" class="card mb-6 filters filters-wide" id="filters">
+    <div class="filters-search">
+      <label for="search" class="eyebrow">Search</label>
+      <input id="search" name="search" class="field mt-2" placeholder="Record #, filename, or location" value="{{ filters.search }}">
+    </div>
+    <div>
+      <label for="predicted" class="eyebrow">Predicted</label>
+      <select id="predicted" name="predicted" class="field mt-2" data-autosubmit>
+        <option value="">All</option>
+        {% for value, name in labels %}<option value="{{ value }}" {% if filters.predicted == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="response_status" class="eyebrow">Response</label>
+      <select id="response_status" name="response_status" class="field mt-2" data-autosubmit>
+        <option value="">All</option>
+        {% for value, name in response_statuses %}
+          <option value="{{ value }}" {% if filters.response_status == value %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="status" class="eyebrow">Classify</label>
+      <select id="status" name="status" class="field mt-2" data-autosubmit>
+        <option value="">All</option>
+        <option value="success" {% if filters.status == "success" %}selected{% endif %}>Success</option>
+        <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
+      </select>
+    </div>
+    <div>
+      <label for="date" class="eyebrow">Date</label>
+      <input id="date" name="date" type="date" class="field mt-2" value="{{ filters.date }}" data-autosubmit>
+    </div>
+    <div class="filters-actions">
+      <noscript><button type="submit" class="btn btn-outline">Apply</button></noscript>
+      <a class="btn btn-outline" href="{% url 'history_export' %}{% if query %}?{{ query }}{% endif %}">Export CSV</a>
+    </div>
+  </form>
 
-<div class="card">
-  {% if not page.object_list %}
-    {% include "partials/empty.html" with title="No classifications match these filters" text="Clear a filter, or classify a new image from the Classify page." %}
-  {% else %}
-  <div class="table-scroll">
-    <table class="table min-820">
-      <caption class="sr-only">Classification log</caption>
-      <thead><tr>
-        <th scope="col">Image</th><th scope="col">Record</th><th scope="col">Predicted</th></tr></thead>
-      <tbody>
+  <div class="card incidents-card">
+    {% if not page.object_list %}
+      {% include "partials/empty.html" with title="No incidents match these filters" text="Clear a filter, or classify a new image from the Classify page." %}
+    {% else %}
+    <div class="incident-cards" aria-label="Incidents">
       {% for c in page.object_list %}
-        <tr class="row-link" data-href="{% url 'result' c.pk %}" tabindex="0" aria-label="Open record {{ c.record_no }}">
-          <td>{% if c.image %}<img src="{{ c.image.url }}" alt="" loading="lazy" class="thumb">{% else %}<div class="thumb hatch" aria-hidden="true"></div>{% endif %}</td>
-          <td class="num"><a href="{% url 'result' c.pk %}">{{ c.record_no }}</a></td>
-          <td>{% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% else %}—{% endif %}</td>
-        </tr>
+      <article class="incident-card row-link" data-href="{% url 'result' c.pk %}" tabindex="0" aria-label="Open record {{ c.record_no }}">
+        <div class="incident-card-media">
+          {% if c.image %}<img src="{{ c.image.url }}" alt="" loading="lazy" class="thumb">{% else %}<div class="thumb hatch" aria-hidden="true"></div>{% endif %}
+        </div>
+        <div class="incident-card-body">
+          <div class="incident-card-top">
+            <a href="{% url 'result' c.pk %}" class="incident-card-record">{{ c.record_no }}</a>
+            {% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% elif c.status == "success" %}<span class="chip chip-muted">{{ c|prediction_label }}</span>{% endif %}
+            {% if c.predicted_label %}<span class="badge badge-status-{{ c.response_status }}">{{ c.response_status_label }}</span>{% endif %}
+          </div>
+          {% if c.user %}<p class="muted small">{{ c.user.display_name }}</p>{% endif %}
+          <p class="incident-card-loc">
+            {% if c.location_text or c.latitude is not None %}
+              {% if c.location_text %}<span class="loc-text">{{ c.location_text }}</span>{% endif %}
+              {% if c.latitude is not None and c.longitude is not None %}
+                <a class="loc-gps muted small" href="https://www.google.com/maps?q={{ c.latitude }},{{ c.longitude }}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">
+                  {{ c.latitude|floatformat:5 }}, {{ c.longitude|floatformat:5 }}
+                </a>
+              {% endif %}
+            {% else %}
+              <span class="muted">No location</span>
+            {% endif %}
+          </p>
+          {% if request.user.can_monitor_incidents and c.predicted_label %}
+          <div class="incident-actions" onclick="event.stopPropagation()">
+            {% if c.response_status != "responding" %}
+            <form method="post" action="{% url 'incident_respond' c.pk %}" class="inline-action">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="responding">
+              <input type="hidden" name="next" value="{% url 'history' %}{% if query %}?{{ query }}{% endif %}">
+              <button type="submit" class="btn btn-primary btn-sm">Responding</button>
+            </form>
+            {% endif %}
+            {% if c.response_status != "open" %}
+            <form method="post" action="{% url 'incident_respond' c.pk %}" class="inline-action">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="cancel">
+              <input type="hidden" name="next" value="{% url 'history' %}{% if query %}?{{ query }}{% endif %}">
+              <button type="submit" class="btn btn-outline btn-sm">Cancel</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </article>
       {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-  <div class="pager mt-3">
-    <span class="muted small">Showing {% if page.paginator.count %}{{ page.start_index }}–{{ page.end_index }}{% else %}0–0{% endif %} of {{ page.paginator.count }}</span>
-    <div class="row">
-      {% if page.has_previous %}<a class="btn btn-outline btn-sm" href="?{% if query %}{{ query }}&{% endif %}page={{ page.previous_page_number }}">Previous</a>{% else %}<span class="btn btn-outline btn-sm disabled" aria-disabled="true">Previous</span>{% endif %}
-      <span class="muted small">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-      {% if page.has_next %}<a class="btn btn-outline btn-sm" href="?{% if query %}{{ query }}&{% endif %}page={{ page.next_page_number }}">Next</a>{% else %}<span class="btn btn-outline btn-sm disabled" aria-disabled="true">Next</span>{% endif %}
+    </div>
+
+    <div class="table-scroll incidents-table-wrap">
+      <table class="table incidents-table">
+        <caption class="sr-only">Incidents</caption>
+        <thead><tr>
+          <th scope="col">Image</th>
+          <th scope="col">Record</th>
+          <th scope="col">Predicted</th>
+          <th scope="col">Response</th>
+          <th scope="col">Location</th>
+          {% if request.user.can_monitor_incidents %}<th scope="col">Action</th>{% endif %}
+        </tr></thead>
+        <tbody>
+        {% for c in page.object_list %}
+          <tr class="row-link" data-href="{% url 'result' c.pk %}" tabindex="0" aria-label="Open record {{ c.record_no }}">
+            <td>{% if c.image %}<img src="{{ c.image.url }}" alt="" loading="lazy" class="thumb">{% else %}<div class="thumb hatch" aria-hidden="true"></div>{% endif %}</td>
+            <td class="num">
+              <a href="{% url 'result' c.pk %}">{{ c.record_no }}</a>
+              {% if c.user %}<span class="muted small block">{{ c.user.display_name }}</span>{% endif %}
+            </td>
+            <td>{% if c.predicted_label %}<span class="chip">{{ c.predicted_label|label_name }}</span>{% elif c.status == "success" %}<span class="chip chip-muted">{{ c|prediction_label }}</span>{% else %}—{% endif %}</td>
+            <td>
+              {% if c.predicted_label %}
+              <span class="badge badge-status-{{ c.response_status }}">{{ c.response_status_label }}</span>
+              {% if c.assigned_officer %}<span class="muted small block">{{ c.assigned_officer.display_name }}</span>{% endif %}
+              {% else %}
+              <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td class="loc-cell">
+              {% if c.location_text or c.latitude is not None %}
+                {% if c.location_text %}<span class="loc-text">{{ c.location_text }}</span>{% endif %}
+                {% if c.latitude is not None and c.longitude is not None %}
+                  <a class="loc-gps muted small" href="https://www.google.com/maps?q={{ c.latitude }},{{ c.longitude }}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">
+                    {{ c.latitude|floatformat:5 }}, {{ c.longitude|floatformat:5 }}
+                  </a>
+                {% endif %}
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            {% if request.user.can_monitor_incidents %}
+            <td class="actions-cell" onclick="event.stopPropagation()">
+              {% if c.predicted_label %}
+              <div class="incident-actions">
+                {% if c.response_status != "responding" %}
+                <form method="post" action="{% url 'incident_respond' c.pk %}" class="inline-action">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="responding">
+                  <input type="hidden" name="next" value="{% url 'history' %}{% if query %}?{{ query }}{% endif %}">
+                  <button type="submit" class="btn btn-primary btn-sm">Responding</button>
+                </form>
+                {% endif %}
+                {% if c.response_status != "open" %}
+                <form method="post" action="{% url 'incident_respond' c.pk %}" class="inline-action">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="cancel">
+                  <input type="hidden" name="next" value="{% url 'history' %}{% if query %}?{{ query }}{% endif %}">
+                  <button type="submit" class="btn btn-outline btn-sm">Cancel</button>
+                </form>
+                {% endif %}
+              </div>
+              {% else %}
+              <span class="muted">—</span>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <div class="pager mt-3">
+      <span class="muted small">Showing {% if page.paginator.count %}{{ page.start_index }}–{{ page.end_index }}{% else %}0–0{% endif %} of {{ page.paginator.count }}</span>
+      <div class="row">
+        {% if page.has_previous %}<a class="btn btn-outline btn-sm" href="?{% if query %}{{ query }}&{% endif %}page={{ page.previous_page_number }}">Previous</a>{% else %}<span class="btn btn-outline btn-sm disabled" aria-disabled="true">Previous</span>{% endif %}
+        <span class="muted small">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}<a class="btn btn-outline btn-sm" href="?{% if query %}{{ query }}&{% endif %}page={{ page.next_page_number }}">Next</a>{% else %}<span class="btn btn-outline btn-sm disabled" aria-disabled="true">Next</span>{% endif %}
+      </div>
     </div>
   </div>
 </div>

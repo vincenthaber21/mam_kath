@@ -11,9 +11,13 @@ Predictions are supplementary and need human verification. The site does not dis
 |---|---|---|
 | Front page | `/` | Public product overview, three-step workflow, five categories and responsible-use guidance |
 | Sign in | `/login/` | Email + password (accounts are made by the administrator) |
+| Dashboard | `/dashboard/` | Monitoring overview: totals, response status, category mix, needs-attention list |
 | Classify | `/classify/` | Upload or take a photo (JPG/PNG, max 10 MB), optional reference label for testing |
-| Result | `/result/<id>/` | Predicted category, confidence, all five class scores, inference time, low-confidence warning (< 60%), reviewer verification |
-| History | `/history/` | Every attempt (failed ones too), search, filters, 20 per page, CSV export |
+| Result | `/result/<id>/` | Predicted category, confidence, all five class scores, inference time; below 70% confidence is left unassigned (Uncertain) for verification |
+| Incidents | `/incidents/` | Every attempt (failed ones too), response status, search, filters, 20 per page, CSV export; officers monitor all reports, residents see their own |
+| Incident map | `/incidents/map/` | Google Map of reports that include GPS (same filters as Incidents); needs `GOOGLE_MAPS_API_KEY` |
+| Users | `/users/` | Administrators manage officer and resident accounts (role, phone, barangay) |
+| Agencies | `/agencies/` | Administrators maintain the notify-agency directory (type, phone, email, coverage) |
 | Evaluation | `/evaluation/` | Upload the labelled test set (.zip, one folder per category): accuracy, per-class / macro / weighted precision-recall-F1, confusion matrix, inference time, failed attempts, misclassified examples, CSV and PDF report |
 | Models | `/models/` | Compare EfficientNet / MobileNetV2 / ResNet50, training curves, upload a model, choose the active one |
 | Dataset | `/dataset/` | Images per category and train / validation / test split |
@@ -23,7 +27,7 @@ Predictions are supplementary and need human verification. The site does not dis
 ## Mobile reporter app
 
 An Expo (React Native) app in `mobile/` lets field users capture an incident photo (camera or gallery),
-optionally attach notes/GPS, and submit it into the same classification log the website uses
+optionally attach notes/GPS, and submit it into the same Incidents list the website uses
 (`source=mobile`). See [`mobile/README.md`](mobile/README.md) for install and LAN setup.
 
 Quick start (with Django already running on `0.0.0.0:8000`):
@@ -127,7 +131,7 @@ python manage.py test
 ```
 
 These cover the public front page and protected classifier route, classification with a tiny dummy model, the JPG/PNG and 10 MB checks, failed attempts being logged,
-the 60% low-confidence flag, verification, history filters and CSV export, the metric computations, and a full
+the 70% unassigned/low-confidence rule, verification, history filters and CSV export, the metric computations, and a full
 test-set evaluation.
 
 ## Settings (.env)
@@ -138,8 +142,9 @@ test-set evaluation.
 | `DEBUG` | `True` on your computer, `False` when deployed |
 | `ALLOWED_HOSTS` / `CSRF_TRUSTED_ORIGINS` | Your domain when deployed |
 | `DATABASE_URL` | Empty = local SQLite file; or a PostgreSQL URL |
-| `LOW_CONFIDENCE_THRESHOLD` | Default `0.60` |
+| `LOW_CONFIDENCE_THRESHOLD` | Default `0.70` (below this, no category is assigned) |
 | `EIC_DEMO_MODE` | Simulated predictions when no model file is active |
+| `GOOGLE_MAPS_API_KEY` | Maps JavaScript API key for `/incidents/map/` (restrict by HTTP referrer) |
 | `MEDIA_ROOT` / `SERVE_MEDIA` | Where uploaded photos and models are stored, and whether Django serves them |
 
 ## Deploy (Render)
@@ -153,7 +158,7 @@ attached disk (`/data/media`). TensorFlow needs at least ~2 GB RAM, so pick a pl
 ```
 eic_site/      settings and main URLs
 accounts/      email-based user and sign-in
-classifier/    labels, upload checks, inference service, Classify / Result / History
+classifier/    labels, upload checks, inference service, Classify / Result / Incidents
 evaluation/    test-set runner (background thread), sklearn metrics, report
 registry/      ML models, dataset counts, management commands (register_model, import_dataset_counts, seed_demo)
 templates/     HTML pages

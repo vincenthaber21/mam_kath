@@ -10,6 +10,7 @@ from django.core.files import File
 
 from classifier.labels import LABELS
 from registry.models import MLModel
+from registry.overfitting import assess as assess_fit
 
 ARCHS = {
     "efficientnet": ("EfficientNet-B0", "EfficientNetB0", "efficientnet"),
@@ -18,6 +19,60 @@ ARCHS = {
 }
 
 ALL_ARCHS = tuple(ARCHS.keys())
+
+# ---- anti-overfitting settings (used by build_augmentation / build_classifier / fit callbacks)
+DROPOUT_RATE = 0.4      # share of features switched off at random on every training step
+L2_WEIGHT = 1e-4        # weight-decay penalty on the classifier layer, keeps its weights small
+EARLY_STOP_PATIENCE = 4  # epochs without val_loss improvement before stopping (best weights restored)
+LR_PATIENCE = 2         # epochs without val_loss improvement before the learning rate is halved
+
+
+def build_augmentation(tf):
+    """Random changes applied to TRAINING images only, so the model never sees the exact same picture
+    twice and cannot memorise pixels. Works on raw 0-255 images (before preprocess_input)."""
+    return tf.keras.Sequential([
+        tf.keras.layers.RandomFlip("horizontal"),
+        tf.keras.layers.RandomRotation(0.08),
+        tf.keras.layers.RandomZoom(0.15),
+        tf.keras.layers.RandomTranslation(0.1, 0.1),
+        tf.keras.layers.RandomContrast(0.15),
+        tf.keras.layers.RandomBrightness(0.15, value_range=(0, 255)),
+    ], name="augmentation")
+
+
+def build_classifier(tf, base, size, n_classes, name="classifier"):
+    """Backbone + regularised head:
+    GlobalAveragePooling -> BatchNormalization -> Dropout -> Dense(softmax, L2 weight decay).
+    Dropout and the augmentation are only active while training; predictions are unaffected."""
+    inputs = tf.keras.Input((size, size, 3))
+    x = base(inputs, training=False)  # keep the backbone's BatchNorm statistics frozen
+    x = tf.keras.layers.GlobalAveragePooling2D(name="pool")(x)
+    x = tf.keras.layers.BatchNormalization(name="head_bn")(x)
+    x = tf.keras.layers.Dropout(DROPOUT_RATE, name="head_dropout")(x)
+    outputs = tf.keras.layers.Dense(
+        n_classes,
+        activation="softmax",
+        kernel_regularizer=tf.keras.regularizers.l2(L2_WEIGHT),
+        name="predictions",
+    )(x)
+    return tf.keras.Model(inputs, outputs, name=name)
+
+
+def regularization_callbacks(tf):
+    """Stop before the model starts memorising, and slow learning down when validation stalls."""
+    return [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss", patience=EARLY_STOP_PATIENCE, restore_best_weights=True
+        ),
+        tf.keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", factor=0.5, patience=LR_PATIENCE, min_lr=1e-7, verbose=1
+        ),
+    ]
+
+
+def pick_best(models):
+    """Best validation macro F1, but a model flagged as overfitting only wins if all of them are."""
+    return max(models, key=lambda m: (not m.fit.is_overfit, m.val_macro_f1 or 0))
 
 
 def train_candidates(
@@ -93,13 +148,11 @@ def train_candidates(
         "  Class weights (smaller classes count more): "
         + ", ".join(f"{LABELS[i]} {w:.2f}" for i, w in class_weight.items())
     )
-    say("  Augmentation on TRAINING images only: random flip, rotation, zoom, contrast.")
-    augment = tf.keras.Sequential([
-        tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomRotation(0.05),
-        tf.keras.layers.RandomZoom(0.1),
-        tf.keras.layers.RandomContrast(0.1),
-    ])
+    say(
+        "  Augmentation on TRAINING images only (prevents memorising): random flip, rotation, zoom, "
+        "shift, contrast, brightness."
+    )
+    augment = build_augmentation(tf)
 
     trained = []
     for n_arch, key in enumerate(keys, 1):
@@ -127,12 +180,7 @@ def train_candidates(
             include_top=False, weights="imagenet", input_shape=(size, size, 3)
         )
         base.trainable = False
-        inputs = tf.keras.Input((size, size, 3))
-        x = base(inputs, training=False)
-        x = tf.keras.layers.GlobalAveragePooling2D()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
-        outputs = tf.keras.layers.Dense(len(LABELS), activation="softmax")(x)
-        model = tf.keras.Model(inputs, outputs, name=key)
+        model = build_classifier(tf, base, size, len(LABELS), name=key)
 
         def n_params(trainable):
             ws = model.trainable_weights if trainable else model.non_trainable_weights
@@ -140,7 +188,11 @@ def train_candidates(
 
         say("\nSTEP 2  Build the transfer-learning model")
         say(f"  Backbone: {display} pre-trained on ImageNet ({len(base.layers)} layers) -> FROZEN")
-        say(f"  New head: GlobalAveragePooling -> Dropout 0.3 -> Dense(5, softmax) for {', '.join(LABELS)}")
+        say(
+            f"  New head: GlobalAveragePooling -> BatchNormalization -> Dropout {DROPOUT_RATE} -> "
+            f"Dense({len(LABELS)}, softmax, L2 {L2_WEIGHT:g}) for {', '.join(LABELS)}"
+        )
+        say("  Anti-overfitting: augmentation, dropout, L2 weight decay, early stopping, learning-rate reduction.")
         say(f"  Trainable parameters: {n_params(True):,}   frozen: {n_params(False):,}")
 
         def fit(lr, n_epochs, initial_epoch=0, phase=""):
@@ -166,18 +218,16 @@ def train_candidates(
                 initial_epoch=initial_epoch,
                 verbose=fit_verbose,
                 class_weight=class_weight,
-                callbacks=[
-                    tf.keras.callbacks.EarlyStopping(
-                        monitor="val_loss", patience=4, restore_best_weights=True
-                    ),
-                    ProgressCallback(),
-                ],
+                callbacks=[*regularization_callbacks(tf), ProgressCallback()],
             )
 
         hist = []
         say(f"\nSTEP 3  Phase 1: train only the new head ({epochs} epochs max, learning rate 0.001)")
         say("  accuracy/loss = training images, val_accuracy/val_loss = validation images.")
-        say("  Stops early if val_loss does not improve for 4 epochs.")
+        say(
+            f"  Halves the learning rate if val_loss stalls for {LR_PATIENCE} epochs; stops early (keeping the "
+            f"best epoch) if it does not improve for {EARLY_STOP_PATIENCE} epochs."
+        )
         h1 = fit(1e-3, epochs, phase="phase 1")
         hist.append(h1.history)
         if fine_tune_epochs > 0:
@@ -207,14 +257,20 @@ def train_candidates(
                     "val_loss": round(float(h["val_loss"][i]), 4),
                 })
 
-        def scores(ds, name):
-            y_true = np.concatenate([y.numpy() for _, y in ds])
-            y_pred = np.argmax(model.predict(ds, verbose=0), axis=1)
+        def scores(ds, name, report=True):
+            # Collect labels and predictions in one pass so shuffled datasets stay aligned.
+            y_true, y_pred = [], []
+            for xb, yb in ds:
+                y_true.append(yb.numpy())
+                y_pred.append(np.argmax(model(xb, training=False).numpy(), axis=1))
+            y_true, y_pred = np.concatenate(y_true), np.concatenate(y_pred)
             acc = float(np.mean(y_true == y_pred))
             f1 = float(f1_score(
                 y_true, y_pred, labels=list(range(len(LABELS))), average="macro", zero_division=0
             ))
             say(f"\n  {name} set: accuracy {acc:.3f}, macro F1 {f1:.3f}")
+            if not report:
+                return acc, f1
             say(classification_report(
                 y_true, y_pred, labels=list(range(len(LABELS))), target_names=LABELS,
                 digits=3, zero_division=0,
@@ -233,8 +289,20 @@ def train_candidates(
             current_arch=key,
             message=f"{display}: evaluating",
         )
+        # Training images WITHOUT augmentation, so the number is comparable with validation/test.
+        train_clean = raw["train"].map(lambda x, y: (preprocess(x), y)).prefetch(tf.data.AUTOTUNE)
+        train_acc = scores(train_clean, "Training (no augmentation)", report=False)[0]
         val_acc, val_f1 = scores(val, "Validation")
         test_acc = scores(test, "Held-out TEST")[0] if test is not None else None
+
+        fit_report = assess_fit(
+            train_accuracy=train_acc, val_accuracy=val_acc, test_accuracy=test_acc, history=history
+        )
+        say("\n  Overfitting check")
+        say(f"  train - val accuracy gap: {fit_report.train_val_gap * 100:+.1f} points")
+        if fit_report.val_test_gap is not None:
+            say(f"  val - test accuracy gap:  {fit_report.val_test_gap * 100:+.1f} points")
+        say(f"  Verdict: {fit_report.label}. {fit_report.summary}")
 
         sample = next(iter(val))[0][:1]
         model(sample, training=False)
@@ -248,33 +316,38 @@ def train_candidates(
         path_out = out_dir / f"{key}_v{model_version}.keras"
         model.save(path_out)
         say(f"  Saved {path_out}  (training took {(time.perf_counter() - t_model) / 60:.1f} min)")
-        m = MLModel(
-            name=display,
-            version=model_version,
-            preprocessing=key,
-            input_size=size,
-            labels_json=LABELS,
-            val_accuracy=round(val_acc, 4),
-            val_macro_f1=round(val_f1, 4),
-            test_accuracy=round(test_acc, 4) if test_acc is not None else None,
-            size_mb=round(path_out.stat().st_size / 1024 / 1024, 1),
-            avg_inference_ms=round(float(np.mean(times)), 1),
-            history=history,
-            notes=(
-                f"ImageNet weights; head {epochs} ep, fine-tuned top {fine_tune_layers} layers "
-                f"{fine_tune_epochs} ep; trained with manage.py train_models."
-            ),
+        # Same name+version replaces the previous row so the comparison table never duplicates.
+        m = MLModel.get_or_prepare(display, model_version)
+        replacing = bool(m.pk)
+        m.preprocessing = key
+        m.input_size = size
+        m.labels_json = LABELS
+        m.train_accuracy = round(train_acc, 4)
+        m.val_accuracy = round(val_acc, 4)
+        m.val_macro_f1 = round(val_f1, 4)
+        m.test_accuracy = round(test_acc, 4) if test_acc is not None else None
+        m.size_mb = round(path_out.stat().st_size / 1024 / 1024, 1)
+        m.avg_inference_ms = round(float(np.mean(times)), 1)
+        m.history = history
+        m.notes = (
+            f"ImageNet weights; head {epochs} ep, fine-tuned top {fine_tune_layers} layers "
+            f"{fine_tune_epochs} ep; regularised head (BatchNorm, dropout {DROPOUT_RATE}, L2 {L2_WEIGHT:g}), "
+            f"augmentation, early stopping + LR reduction; trained with manage.py train_models."
         )
+        if m.file:
+            m.file.delete(save=False)
         with path_out.open("rb") as fh:
             m.file.save(path_out.name, File(fh), save=False)
-        if activate and not MLModel.objects.filter(is_active=True).exists():
+        if activate and not MLModel.objects.filter(is_active=True).exclude(pk=m.pk).exists() and not m.is_active:
             m.is_active = True
         m.save()
         trained.append(m)
         test_txt = f"{test_acc:.3f}" if test_acc is not None else "n/a"
+        action = "updated" if replacing else "registered"
         say(
-            f"{display}: val acc {val_acc:.3f}, val macro F1 {val_f1:.3f}, test acc {test_txt}, "
-            f"{m.size_mb} MB, {m.avg_inference_ms} ms -> registered (id {m.id})"
+            f"{display}: train acc {train_acc:.3f}, val acc {val_acc:.3f}, val macro F1 {val_f1:.3f}, "
+            f"test acc {test_txt}, {m.size_mb} MB, {m.avg_inference_ms} ms, fit: {fit_report.label} "
+            f"-> {action} (id {m.id})"
         )
         progress(
             processed=n_arch,
@@ -286,9 +359,10 @@ def train_candidates(
         tf.keras.backend.clear_session()
 
     if trained and activate:
-        best = max(trained, key=lambda m: m.val_macro_f1 or 0)
+        best = pick_best(trained)
         best.is_active = True
         best.save()
-        say(f"\nActive model: {best} (best validation macro F1).")
+        note = " — WARNING: every candidate is flagged as overfitting" if best.fit.is_overfit else ""
+        say(f"\nActive model: {best} (best validation macro F1 among models that do not overfit){note}.")
 
     return trained

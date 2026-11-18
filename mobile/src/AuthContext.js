@@ -40,8 +40,14 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const signIn = useCallback(async (email, password) => {
-    const data = await api.login(email.trim(), password);
+  const signIn = useCallback(async (identifier, password) => {
+    const data = await api.login(String(identifier || "").trim(), password);
+    await persist(data.token, data.user);
+    return data.user;
+  }, [persist]);
+
+  const register = useCallback(async (payload) => {
+    const data = await api.register(payload);
     await persist(data.token, data.user);
     return data.user;
   }, [persist]);
@@ -55,9 +61,23 @@ export function AuthProvider({ children }) {
     await persist(null, null);
   }, [persist, token]);
 
+  /** Drop local credentials without calling logout (stale token / guest mode). */
+  const clearSession = useCallback(async () => {
+    await persist(null, null);
+  }, [persist]);
+
   const value = useMemo(
-    () => ({ token, user, ready, signIn, signOut, isSignedIn: Boolean(token) }),
-    [token, user, ready, signIn, signOut],
+    () => ({
+      token,
+      user,
+      ready,
+      signIn,
+      register,
+      signOut,
+      clearSession,
+      isSignedIn: Boolean(token),
+    }),
+    [token, user, ready, signIn, register, signOut, clearSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -8,6 +8,14 @@ from .models import AuthToken
 
 
 def parse_bearer(request):
+    """Read the API token from Authorization, or X-EIC-Token.
+
+    Mobile clients prefer X-EIC-Token so Microsoft Dev Tunnels does not treat a
+    Bearer value as a tunnel access token and return 401 before Django runs.
+    """
+    custom = (request.META.get("HTTP_X_EIC_TOKEN") or "").strip()
+    if custom:
+        return custom
     header = request.META.get("HTTP_AUTHORIZATION", "")
     if not header:
         return None

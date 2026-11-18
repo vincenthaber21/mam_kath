@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.utils import timezone
 
-from classifier.labels import LABEL_NAMES, label_name
+from classifier.labels import LABEL_NAMES, display_prediction, label_name
 
 
 def absolute_media_url(request, file_field):
@@ -16,8 +16,11 @@ def absolute_media_url(request, file_field):
 def user_payload(user):
     return {
         "id": user.pk,
+        "username": user.username,
         "email": user.email,
         "name": user.display_name,
+        "role": getattr(user, "role", "") or "",
+        "barangay": getattr(user, "barangay", "") or "",
     }
 
 
@@ -29,7 +32,7 @@ def classification_payload(rec, request=None, detail=False):
         "error": rec.error or "",
         "filename": rec.filename,
         "predicted_label": rec.predicted_label or "",
-        "predicted_label_name": label_name(rec.predicted_label) if rec.predicted_label else "",
+        "predicted_label_name": display_prediction(rec) if rec.status == "success" else (label_name(rec.predicted_label) if rec.predicted_label else ""),
         "confidence": rec.confidence,
         "low_confidence": rec.low_confidence,
         "inference_ms": rec.inference_ms,

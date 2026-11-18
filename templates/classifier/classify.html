@@ -2,49 +2,131 @@
 {% block title %}Classify an incident image{% endblock %}
 {% block description %}Upload or capture one emergency photo and get a predicted category with a confidence score.{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="h1">Classify an incident image</h1>
-  <p class="subtitle">Upload or capture one photo. The model returns a single predicted category and confidence score.</p>
-</div>
+<div class="classify-page">
+  <div class="page-header classify-header">
+    <div>
+      <p class="eyebrow">Workspace</p>
+      <h1 class="h1">Classify an incident image</h1>
+      <p class="subtitle">Upload or capture one photo. The model returns a single predicted category and confidence score for human review.</p>
+    </div>
+    <ul class="classify-meta" aria-label="Upload requirements">
+      <li>JPG or PNG</li>
+      <li>Max 10&nbsp;MB</li>
+      <li>One category</li>
+    </ul>
+  </div>
 
-<div class="grid grid-3">
-  <form method="post" enctype="multipart/form-data" class="card span-2" id="classify-form" novalidate>
-    {% csrf_token %}
-    <label class="dropzone" id="dropzone" for="image-input" tabindex="0" aria-label="Drop an image here or press to choose a file">
-      <img id="preview" alt="Selected image preview" hidden>
-      <span class="dropzone-text" id="dropzone-text">
-        <span class="hide-sm">Drag &amp; drop an image here</span><span class="show-sm">Tap to choose a photo</span>
-        <span class="muted small">JPG or PNG · max 10 MB</span>
-      </span>
-    </label>
-    <input type="file" name="image" id="image-input" accept="image/jpeg,image/png" class="sr-only">
-    <p class="muted small mt-2" id="file-info" hidden></p>
-    <p class="error mt-2" id="file-error" role="alert" {% if not error %}hidden{% endif %}>{{ error|default:"" }}</p>
-
-    <div class="row mt-4">
-      <div class="row-buttons">
-        <button type="button" class="btn btn-outline" id="gallery-btn"><span class="show-sm">Gallery</span><span class="hide-sm">Choose file</span></button>
-        <button type="button" class="btn btn-outline" id="camera-btn"><span class="show-sm">Camera</span><span class="hide-sm">Use camera</span></button>
+  <div class="classify-layout">
+    <form method="post" enctype="multipart/form-data" class="classify-panel classify-upload" id="classify-form" novalidate>
+      {% csrf_token %}
+      <div class="classify-panel-head">
+        <h2>Incident photo</h2>
+        <p class="muted small">Drag a file in, choose from gallery, or use the camera.</p>
       </div>
-      <button type="submit" class="btn btn-primary push-right" id="classify-btn">Classify image</button>
-    </div>
 
-    <div class="row mt-4">
-      <label for="reference" class="muted small">Optional for testing: reference label</label>
-      <select name="reference_label" id="reference" class="field field-auto">
-        <option value="">— none —</option>
-        {% for value, name in labels %}<option value="{{ value }}" {% if value == reference %}selected{% endif %}>{{ name }}</option>{% endfor %}
-      </select>
-    </div>
-  </form>
+      <label class="dropzone" id="dropzone" for="image-input" tabindex="0" aria-label="Drop an image here or press to choose a file">
+        <img id="preview" alt="Selected image preview" hidden>
+        <span class="dropzone-text" id="dropzone-text">
+          <span class="dropzone-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 14v5h14v-5"/></svg>
+          </span>
+          <span class="dropzone-title hide-sm">Drop an image here</span>
+          <span class="dropzone-title show-sm">Tap to choose a photo</span>
+          <span class="muted small">JPG or PNG · max 10 MB</span>
+        </span>
+      </label>
+      <input type="file" name="image" id="image-input" accept="image/jpeg,image/png" class="sr-only">
+      <p class="muted small mt-2" id="file-info" hidden></p>
+      <p class="error mt-2" id="file-error" role="alert" {% if not error %}hidden{% endif %}>{{ error|default:"" }}</p>
 
-  <div class="card fit">
-    <h2 class="eyebrow">Categories</h2>
-    <div class="chips mt-3">{% for value, name in labels %}<span class="chip">{{ name }}</span>{% endfor %}</div>
-    <h2 class="eyebrow mt-7">{% if voting %}Models (voting){% else %}Active model{% endif %}</h2>
-    <p class="mt-2">{% if voting %}{{ voting|length }} models vote: {% for m in voting %}{{ m.name }}{% if not forloop.last %}, {% endif %}{% endfor %}. <a href="{% url 'models' %}">Change</a>{% elif active %}{% if selection_mode == "auto" %}<span class="muted small">Automatic (highest accuracy):</span> {% endif %}{{ active.name }} · v{{ active.version }}{% if not active.file %} <span class="muted small">(no model file{% if DEMO_PREDICTIONS %}, demo predictions{% endif %})</span>{% endif %}{% else %}No active model — set one on the <a href="{% url 'models' %}">Models page</a>.{% endif %}</p>
-    <div class="notice mt-4" role="note">Predictions are supplementary information and require human verification. This tool does not dispatch or notify agencies.</div>
+      <div class="classify-actions">
+        <div class="row-buttons">
+          <button type="button" class="btn btn-outline" id="gallery-btn"><span class="show-sm">Gallery</span><span class="hide-sm">Choose file</span></button>
+          <button type="button" class="btn btn-outline" id="camera-btn"><span class="show-sm">Camera</span><span class="hide-sm">Use camera</span></button>
+        </div>
+        <button type="submit" class="btn btn-primary" id="classify-btn">Classify image</button>
+      </div>
+
+      <div class="classify-report-fields">
+        <label for="notes" class="form-label">What happened (optional)</label>
+        <textarea name="notes" id="notes" class="field" rows="2" maxlength="2000" placeholder="Short description for responders / reviewers">{{ notes }}</textarea>
+
+        <label for="location_text" class="form-label mt-3">Location (optional)</label>
+        <select name="location_text" id="location_text" class="field">
+          <option value="">— Select barangay —</option>
+          {% for name in barangays %}
+          <option value="{{ name }}" {% if location_text == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+          {% if location_text and location_text not in barangays %}
+          <option value="{{ location_text }}" selected>{{ location_text }}</option>
+          {% endif %}
+        </select>
+        <p class="muted small mt-1">Santa Maria barangay. Your profile barangay is selected automatically when set.</p>
+        <div class="row mt-2 loc-gps-row">
+          <button type="button" class="btn btn-outline btn-sm" id="gps-btn">Use current GPS</button>
+          <span class="muted small" id="gps-status" aria-live="polite"></span>
+        </div>
+        <input type="hidden" name="latitude" id="latitude" value="{{ latitude }}">
+        <input type="hidden" name="longitude" id="longitude" value="{{ longitude }}">
+      </div>
+
+      <div class="classify-reference">
+        <label for="reference" class="form-label">Optional reference label</label>
+        <select name="reference_label" id="reference" class="field">
+          <option value="">— none —</option>
+          {% for value, name in labels %}<option value="{{ value }}" {% if value == reference %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+        <p class="muted small mt-2">Use this only when testing against a known category.</p>
+      </div>
+    </form>
+
+    <aside class="classify-side">
+      <section class="classify-panel">
+        <h2 class="eyebrow">Categories</h2>
+        <ul class="classify-cats">
+          {% for value, name in labels %}
+          <li><span>{{ forloop.counter|stringformat:"02d" }}</span>{{ name }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="classify-panel">
+        <h2 class="eyebrow">{% if voting %}Models (voting){% else %}Active model{% endif %}</h2>
+        <p class="classify-model mt-3">
+          {% if voting %}
+            {{ voting|length }} models vote:
+            {% for m in voting %}{{ m.name }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+            <a href="{% url 'models' %}">Change</a>
+          {% elif active %}
+            {% if selection_mode == "auto" %}<span class="muted small">Automatic (highest accuracy)</span>{% endif %}
+            <strong>{{ active.name }}</strong>
+            <span class="muted">v{{ active.version }}</span>
+            {% if not active.file %}
+            <span class="muted small">(no model file{% if DEMO_PREDICTIONS %}, demo predictions{% endif %})</span>
+            {% endif %}
+          {% else %}
+            No active model — set one on the <a href="{% url 'models' %}">Models page</a>.
+          {% endif %}
+        </p>
+      </section>
+
+      <div class="notice" role="note">Predictions are supplementary information and require human verification. This tool does not dispatch or notify agencies.</div>
+    </aside>
   </div>
 </div>
+
+<dialog id="camera-dialog" class="dialog dialog-camera" aria-labelledby="camera-title">
+  <h2 class="h2" id="camera-title">Use camera</h2>
+  <p class="muted small mt-1">Allow camera access, then take a photo to classify.</p>
+  <div class="camera-frame mt-4">
+    <video id="camera-video" autoplay playsinline muted></video>
+    <canvas id="camera-canvas" hidden></canvas>
+  </div>
+  <p class="error mt-2" id="camera-error" role="alert" hidden></p>
+  <div class="row end mt-4">
+    <button type="button" class="btn btn-outline" data-close id="camera-cancel">Cancel</button>
+    <button type="button" class="btn btn-primary" id="camera-shot" disabled>Take photo</button>
+  </div>
+</dialog>
 {% endblock %}
 {% block scripts %}<script>EIC.initClassify();</script>{% endblock %}

@@ -37,7 +37,19 @@
       "apiUrl": "https://bb6cjv85-8000.asse.devtunnels.ms/api"
     },
     "plugins": [
-      "expo-status-bar",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Attach your approximate GPS location to the incident report."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Capture an incident photo to report and classify it.",
+          "photosPermission": "Choose an incident photo from your gallery to report."
+        }
+      ],
       [
         "expo-splash-screen",
         {

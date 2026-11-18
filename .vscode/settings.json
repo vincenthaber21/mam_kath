@@ -1,0 +1,9 @@
+{
+  "remote.portsAttributes": {
+    "8000": {
+      "label": "Django EIC",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  }
+}

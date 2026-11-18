@@ -18,6 +18,7 @@ class Command(BaseCommand):
         parser.add_argument("--preprocessing", choices=[c for c, _ in MLModel.PREPROC], required=True)
         parser.add_argument("--input-size", type=int, default=224)
         parser.add_argument("--labels", default=json.dumps(LABELS), help="JSON list in the model's output order")
+        parser.add_argument("--train-accuracy", type=float, help="Accuracy on un-augmented training images")
         parser.add_argument("--val-accuracy", type=float)
         parser.add_argument("--val-macro-f1", type=float)
         parser.add_argument("--test-accuracy", type=float)
@@ -41,15 +42,25 @@ class Command(BaseCommand):
         if opts["history"]:
             history = json.loads(Path(opts["history"]).read_text())
 
-        m = MLModel(
-            name=opts["name"], version=opts["version"], preprocessing=opts["preprocessing"],
-            input_size=opts["input_size"], labels_json=labels, val_accuracy=opts["val_accuracy"],
-            val_macro_f1=opts["val_macro_f1"], test_accuracy=opts["test_accuracy"],
-            size_mb=round(path.stat().st_size / 1024 / 1024, 1), history=history, notes=opts["notes"],
-            is_active=opts["activate"],
-        )
+        m = MLModel.get_or_prepare(opts["name"], opts["version"])
+        replacing = bool(m.pk)
+        m.preprocessing = opts["preprocessing"]
+        m.input_size = opts["input_size"]
+        m.labels_json = labels
+        m.train_accuracy = opts["train_accuracy"]
+        m.val_accuracy = opts["val_accuracy"]
+        m.val_macro_f1 = opts["val_macro_f1"]
+        m.test_accuracy = opts["test_accuracy"]
+        m.size_mb = round(path.stat().st_size / 1024 / 1024, 1)
+        m.history = history
+        m.notes = opts["notes"]
+        if opts["activate"]:
+            m.is_active = True
+        if m.file:
+            m.file.delete(save=False)
         with path.open("rb") as fh:
             m.file.save(path.name, File(fh), save=False)
         m.save()
+        verb = "Updated" if replacing else "Registered"
         state = " and activated it" if m.is_active else ""
-        self.stdout.write(self.style.SUCCESS(f"Registered {m}{state} (id {m.id})."))
+        self.stdout.write(self.style.SUCCESS(f"{verb} {m}{state} (id {m.id}). Fit check: {m.fit.label}. {m.fit.summary}"))

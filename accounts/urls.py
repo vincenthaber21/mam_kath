@@ -2,6 +2,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from .forms import EmailLoginForm
+from . import views
 
 urlpatterns = [
     path(
@@ -14,4 +15,7 @@ urlpatterns = [
         name="login",
     ),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("users/", views.user_list, name="user_list"),
+    path("users/new/", views.user_create, name="user_create"),
+    path("users/<int:pk>/edit/", views.user_edit, name="user_edit"),
 ]

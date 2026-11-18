@@ -6,7 +6,7 @@
   <section class="login-intro">
     <a href="{% url 'home' %}" class="site-brand" aria-label="Back to front page">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z"/><path d="M8.5 12h2l1.2-2.5 2 5 1.2-2.5h.6"/></svg></span>
-      <span><strong>Emergency Incident</strong><span>Classifier</span></span>
+      <span class="brand-text"><strong>Emergency Incident</strong><span>Classifier</span></span>
     </a>
     <div class="login-intro-copy">
       <p class="hero-kicker"><span class="status-dot" aria-hidden="true"></span> Research workspace</p>
@@ -27,8 +27,9 @@
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next }}">
         <div>
-          <label for="{{ form.username.id_for_label }}" class="form-label">Email address</label>
+          <label for="{{ form.username.id_for_label }}" class="form-label">Username or email</label>
           {{ form.username }}
+          <p class="muted xs mt-1">You can sign in with either your username or email address.</p>
           {% for e in form.username.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
         </div>
         <div>

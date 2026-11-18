@@ -28,12 +28,19 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-insecure-key-change-me")
 DEBUG = env_bool("DEBUG", True)
 ALLOWED_HOSTS = env_list(
     "ALLOWED_HOSTS",
-    "localhost,127.0.0.1,bb6cjv85-8000.asse.devtunnels.ms",
+    "localhost,127.0.0.1,bb6cjv85-8000.asse.devtunnels.ms,.asse.devtunnels.ms,.trycloudflare.com",
 )
 CSRF_TRUSTED_ORIGINS = env_list(
     "CSRF_TRUSTED_ORIGINS",
     "https://bb6cjv85-8000.asse.devtunnels.ms",
 )
+# Empty CSRF_TRUSTED_ORIGINS= in .env would otherwise wipe tunnel origins.
+if not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = ["https://bb6cjv85-8000.asse.devtunnels.ms"]
+# Keep leading-dot tunnel suffixes so new tunnel IDs still work without edits.
+for _suffix in (".asse.devtunnels.ms", ".trycloudflare.com"):
+    if not any(h == _suffix or h.endswith(_suffix) for h in ALLOWED_HOSTS):
+        ALLOWED_HOSTS = list(ALLOWED_HOSTS) + [_suffix]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -90,6 +97,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or f"sqlite:///{BASE_D
 DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)}
 
 AUTH_USER_MODEL = "accounts.User"
+AUTHENTICATION_BACKENDS = [
+    "accounts.backends.EmailOrUsernameBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -97,7 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "classify"
+LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "home"
 
 LANGUAGE_CODE = "en-us"
@@ -128,8 +139,9 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---- Classifier settings -------------------------------------------------
-# Predictions below this confidence are flagged for manual verification.
-LOW_CONFIDENCE_THRESHOLD = float(os.environ.get("LOW_CONFIDENCE_THRESHOLD", "0.60"))
+# Predictions below this confidence are not assigned to a category (shown as
+# Uncertain) and are flagged for manual verification.
+LOW_CONFIDENCE_THRESHOLD = float(os.environ.get("LOW_CONFIDENCE_THRESHOLD", "0.70"))
 # Uploaded incident photos: JPG/PNG only, at most this many megabytes.
 MAX_IMAGE_MB = 10
 # Uploaded test sets (.zip) for the evaluation page.
@@ -141,6 +153,8 @@ EIC_DEMO_MODE = env_bool("EIC_DEMO_MODE", False)
 EVALUATION_SYNC = env_bool("EVALUATION_SYNC", False)
 # Run Models-page training in the request instead of a background thread (used by tests).
 TRAINING_SYNC = env_bool("TRAINING_SYNC", False)
+# Google Maps JavaScript API key for the Incidents map page (restrict by HTTP referrer in Cloud Console).
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
 
 # Large evaluation zips are streamed to disk instead of memory.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024

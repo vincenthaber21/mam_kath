@@ -11,6 +11,7 @@ import {
 
 import { fetchClassification, verifyClassification } from "../api";
 import { useAuth } from "../AuthContext";
+import { resolveImageUri } from "../config";
 import { colors, spacing } from "../theme";
 
 function pct(value) {
@@ -81,6 +82,10 @@ export default function ResultScreen({ route, navigation }) {
   }
 
   const failed = rec.status === "failed";
+  const imageUri =
+    route.params?.localImageUri ||
+    resolveImageUri(rec.image_url) ||
+    null;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -89,32 +94,37 @@ export default function ResultScreen({ route, navigation }) {
       <Text style={styles.lead}>
         {failed
           ? rec.error || "Classification failed, but the attempt is logged."
-          : "This incident is now in the website classification log for review."}
+          : "This incident is now in the website Incidents page for review."}
       </Text>
 
-      {rec.image_url ? <Image source={{ uri: rec.image_url }} style={styles.image} /> : null}
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+      ) : (
+        <View style={[styles.image, styles.imageEmpty]}>
+          <Text style={styles.imageEmptyText}>No photo preview</Text>
+        </View>
+      )}
 
       {!failed ? (
         <View style={styles.card}>
           <Text style={styles.label}>Predicted category</Text>
-          <Text style={styles.prediction}>{rec.predicted_label_name || rec.predicted_label}</Text>
+          <Text style={styles.prediction}>{rec.predicted_label_name || rec.predicted_label || "Uncertain"}</Text>
           <View style={styles.stats}>
             <View style={styles.stat}>
               <Text style={styles.label}>Confidence</Text>
               <Text style={styles.statValue}>{pct(rec.confidence)}</Text>
             </View>
-            <View style={styles.stat}>
-              <Text style={styles.label}>Inference</Text>
-              <Text style={styles.statValue}>
-                {rec.inference_ms != null ? `${Math.round(rec.inference_ms)} ms` : "—"}
-              </Text>
-            </View>
           </View>
           {rec.low_confidence ? (
-            <Text style={styles.warn}>Low confidence — please verify before relying on this label.</Text>
+            <Text style={styles.warn}>Uncertain — confidence too low to assign an incident category. Please verify.</Text>
           ) : null}
           {rec.notes ? <Text style={styles.meta}>Notes: {rec.notes}</Text> : null}
-          {rec.location_text ? <Text style={styles.meta}>Location: {rec.location_text}</Text> : null}
+          {rec.location_text ? <Text style={styles.meta}>Barangay: {rec.location_text}</Text> : null}
+          {rec.latitude != null && rec.longitude != null ? (
+            <Text style={styles.meta}>
+              GPS: {Number(rec.latitude).toFixed(5)}, {Number(rec.longitude).toFixed(5)}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 
@@ -162,7 +172,9 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.muted, fontWeight: "700", letterSpacing: 0.4 },
   heading: { fontSize: 28, fontWeight: "800", color: colors.text, marginTop: 4 },
   lead: { color: colors.muted, marginTop: 6, marginBottom: spacing.lg, lineHeight: 20 },
-  image: { width: "100%", height: 240, borderRadius: 16, backgroundColor: colors.border },
+  image: { width: "100%", height: 280, borderRadius: 16, backgroundColor: colors.border },
+  imageEmpty: { alignItems: "center", justifyContent: "center" },
+  imageEmptyText: { color: colors.muted, fontWeight: "600" },
   card: {
     marginTop: spacing.lg,
     backgroundColor: colors.surface,

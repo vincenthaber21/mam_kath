@@ -9,6 +9,7 @@ from classifier.services import active_model, preload_models_in_use, trained_mod
 
 from . import runner
 from .forms import ModelUploadForm, TrainModelsForm
+from .overfitting import GAP_OVERFIT, GAP_WATCH
 from .models import DatasetInfo, DatasetSplit, MLModel, SelectionSetting, TrainingRun
 from .training import ARCHS
 
@@ -19,7 +20,7 @@ def _models_context(form=None, train_form=None, train_run=None):
     setting = SelectionSetting.get()
     voters = trained_models()
     charts = {
-        str(m.id): {"name": f"{m.name} v{m.version}", "history": m.history or []}
+        str(m.id): {"name": f"{m.name} v{m.version}", "history": m.history or [], "fit": m.fit.as_dict()}
         for m in models
     }
     busy = bool(train_run and train_run.status in ("pending", "running"))
@@ -37,6 +38,8 @@ def _models_context(form=None, train_form=None, train_run=None):
         "active": active,
         "voters": voters,
         "voting_ids": {m.pk for m in voters} if setting.mode == "voting" and len(voters) >= 2 else set(),
+        "fit_watch_pts": round(GAP_WATCH * 100),
+        "fit_overfit_pts": round(GAP_OVERFIT * 100),
         "nav": "models",
     }
 
@@ -114,6 +117,7 @@ def set_selection_mode(request):
 @login_required
 @require_POST
 def start_training(request):
+    runner.fail_stale_runs()
     if TrainingRun.objects.filter(status__in=("pending", "running")).exists():
         messages.error(request, "A training run is already in progress. Wait for it to finish.")
         return redirect("models")

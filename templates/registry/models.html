@@ -90,7 +90,7 @@
       <span>
         <strong class="block">{% if value == "auto" %}Automatic (highest accuracy){% elif value == "voting" %}Voting (all models){% else %}Manual{% endif %}</strong>
         <span class="muted xs">
-          {% if value == "auto" %}Always uses the trained model with the highest validation accuracy. Switches by itself when a better model is trained.
+          {% if value == "auto" %}Always uses the trained model with the highest validation accuracy, skipping models flagged as overfitting. Switches by itself when a better model is trained.
           {% elif value == "voting" %}Every trained model classifies the image. The label with the most votes wins; on a tie, the most confident model decides. Slower: runs all models.
           {% else %}Uses the model you choose with Set active.{% endif %}
         </span>
@@ -108,16 +108,28 @@
   <div class="table-scroll">
     <table class="table min-760">
       <caption class="sr-only">Candidate models</caption>
-      <thead><tr><th scope="col">Model</th><th scope="col">Val. accuracy</th><th scope="col">Macro F1</th><th scope="col">Test accuracy</th><th scope="col">Size</th><th scope="col">Avg inference</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+      <thead><tr><th scope="col">Model</th><th scope="col">Train accuracy</th><th scope="col">Val. accuracy</th><th scope="col">Macro F1</th><th scope="col">Test accuracy</th><th scope="col">Size</th><th scope="col">Avg inference</th><th scope="col">Overfitting check</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
       <tbody>
       {% for m in models %}
         <tr>
           <td><strong>{{ m.name }}</strong> <span class="muted">v{{ m.version }}</span>{% if not m.file %}<br><span class="muted xs">no model file</span>{% endif %}</td>
+          <td class="num">{{ m.train_accuracy|pct }}</td>
           <td class="num">{{ m.val_accuracy|pct }}</td>
           <td class="num">{{ m.val_macro_f1|fixed2 }}</td>
           <td class="num">{{ m.test_accuracy|pct }}</td>
           <td class="num">{% if m.size_mb is not None %}{{ m.size_mb }} MB{% else %}—{% endif %}</td>
           <td class="num">{{ m.avg_inference_ms|ms }}</td>
+          {% with fit=m.fit %}
+          <td class="fit-cell">
+            <span class="badge badge-fit-{{ fit.status }}" title="{{ fit.summary }}">{{ fit.label }}</span>
+            {% if fit.train_val_gap is not None or fit.val_test_gap is not None %}
+            <span class="block muted xs mt-1">
+              {% if fit.train_val_gap is not None %}train−val {{ fit.train_val_gap|signed_points }}{% endif %}{% if fit.train_val_gap is not None and fit.val_test_gap is not None %} · {% endif %}{% if fit.val_test_gap is not None %}val−test {{ fit.val_test_gap|signed_points }}{% endif %}
+            </span>
+            {% endif %}
+            {% for r in fit.reasons %}<span class="block xs mt-1 fit-reason">{{ r }}</span>{% endfor %}
+          </td>
+          {% endwith %}
           <td>{% if m.pk in voting_ids %}<span class="badge badge-active">Voting</span>{% if m.is_active %} <span class="badge badge-active">Best</span>{% endif %}
             {% elif m.is_active %}<span class="badge badge-active">{% if selection.mode == "auto" %}Active · best{% else %}Active{% endif %}</span>{% else %}
             <button type="button" class="btn btn-outline btn-sm" data-activate="{% url 'model_activate' m.pk %}" data-name="{{ m.name }}" data-version="{{ m.version }}">Set active</button>{% endif %}</td>
@@ -126,6 +138,11 @@
       </tbody>
     </table>
   </div>
+  <p class="muted xs mt-4">
+    <strong>Overfitting check:</strong> a model overfits when it memorises training images instead of learning what carries over to new ones.
+    It is flagged as <em>Watch</em> when training accuracy beats validation, or validation beats test, by {{ fit_watch_pts }}+ points (or validation loss climbs while training loss falls),
+    and as <em>Overfitting</em> at {{ fit_overfit_pts }}+ points. Overfitting models are never picked automatically while a better-fitting one exists.
+  </p>
   {% endif %}
 </div>
 
@@ -135,6 +152,7 @@
   <select id="chart-model" class="field field-auto">
     {% for m in models %}<option value="{{ m.pk }}" {% if chart_default and m.pk == chart_default.pk %}selected{% endif %}>{{ m.name }} v{{ m.version }}</option>{% endfor %}
   </select>
+  <span class="muted small" id="chart-fit" aria-live="polite"></span>
 </div>
 <div class="grid grid-2 mb-6">
   <div class="card"><h2 class="eyebrow">Training vs validation accuracy</h2><div class="chart mt-4"><canvas id="acc-chart" role="img" aria-label="Training vs validation accuracy"></canvas><div class="empty chart-empty" hidden><p class="empty-title">No training history</p><p class="muted small">This model has no per-epoch history recorded.</p></div></div></div>

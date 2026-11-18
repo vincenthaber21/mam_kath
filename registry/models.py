@@ -20,6 +20,9 @@ class MLModel(models.Model):
     labels_json = models.JSONField(default=list, help_text="Class labels in the order the model outputs them")
     input_size = models.PositiveIntegerField(default=224)
     preprocessing = models.CharField(max_length=20, choices=PREPROC, default="efficientnet")
+    train_accuracy = models.FloatField(
+        null=True, blank=True, help_text="Accuracy on the training images without augmentation (overfitting check)"
+    )
     val_accuracy = models.FloatField(null=True, blank=True)
     val_macro_f1 = models.FloatField(null=True, blank=True)
     test_accuracy = models.FloatField(null=True, blank=True)
@@ -37,6 +40,7 @@ class MLModel(models.Model):
     class Meta:
         ordering = ["created_at", "id"]
         verbose_name = "ML model"
+        unique_together = [("name", "version")]
 
     def __str__(self):
         return f"{self.name} v{self.version}"
@@ -44,6 +48,21 @@ class MLModel(models.Model):
     @property
     def has_file(self):
         return bool(self.file)
+
+    @property
+    def fit(self):
+        """Overfitting report (see registry/overfitting.py)."""
+        from .overfitting import assess_model
+
+        return assess_model(self)
+
+    @classmethod
+    def get_or_prepare(cls, name, version):
+        """Return the existing row for name+version, or a new unsaved instance (no duplicates)."""
+        existing = cls.objects.filter(name=name, version=version).order_by("-is_active", "-id").first()
+        if existing:
+            return existing
+        return cls(name=name, version=version)
 
     def save(self, *args, **kwargs):
         # Only one model may be active at a time.

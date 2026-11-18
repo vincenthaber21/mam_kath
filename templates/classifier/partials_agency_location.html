@@ -1,0 +1,23 @@
+{% comment %}Agency station location picker. Expects `f` (NotifyAgencyForm) and `picker_id`.{% endcomment %}
+<fieldset class="agency-location" data-agency-location>
+  <legend class="eyebrow">Station location in Santa Maria</legend>
+  <p class="muted xs mt-1">{% if google_maps_api_key %}Click the map or drag the pin to where the agency is. {% endif %}Shown on the incident map so officers can see the nearest responders.</p>
+  {% if google_maps_api_key %}
+  <div id="{{ picker_id }}" class="agency-picker mt-2" role="region" aria-label="Pick agency location on map"></div>
+  {% endif %}
+  <div class="mt-2 agency-coords">
+    <div>
+      <label for="{{ f.latitude.id_for_label }}" class="eyebrow">Latitude</label>
+      {{ f.latitude }}
+      {% for e in f.latitude.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+    <div>
+      <label for="{{ f.longitude.id_for_label }}" class="eyebrow">Longitude</label>
+      {{ f.longitude }}
+      {% for e in f.longitude.errors %}<p class="error mt-1">{{ e }}</p>{% endfor %}
+    </div>
+  </div>
+  <div class="row mt-2">
+    <button type="button" class="btn btn-outline btn-sm" data-agency-clear>Clear location</button>
+  </div>
+</fieldset>
