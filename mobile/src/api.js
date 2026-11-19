@@ -160,6 +160,30 @@ async function imageFileForUpload(File, Paths, uri, name) {
   return source;
 }
 
+/**
+ * Same upload shape as the website camera capture:
+ * `new File([bytes], "camera-<time>.jpg", { type: "image/jpeg" })` on field name "image".
+ */
+async function webStyleImagePart(expoFetch, uri, name) {
+  const WebFile = globalThis.File;
+  if (typeof WebFile !== "function") {
+    throw new Error("File constructor unavailable");
+  }
+  const fileName = imageUploadName(name);
+  const fallbackType = /\.png$/i.test(fileName) ? "image/png" : "image/jpeg";
+  const local = await expoFetch(uri);
+  if (!local.ok) {
+    throw new Error("Could not read the selected photo.");
+  }
+  const blob = await local.blob();
+  if (!blob || blob.size === 0) {
+    throw new Error("This photo is empty.");
+  }
+  const mime = /^image\/(png|jpe?g)$/i.test(blob.type || "") ? blob.type : fallbackType;
+  const type = /^image\/jpg$/i.test(mime) ? "image/jpeg" : mime;
+  return new WebFile([blob], fileName, { type });
+}
+
 async function postClassify(expoFetch, form, token) {
   const headers = {
     Accept: "application/json",
@@ -172,9 +196,9 @@ async function postClassify(expoFetch, form, token) {
 }
 
 export async function classifyIncident(token, { uri, name, notes, locationText, latitude, longitude }) {
-  // Expo SDK 58 installs WinterCG fetch as global fetch. Classic React Native
-  // FormData parts `{ uri, name, type }` throw "Unsupported FormDataPart implementation".
-  // Append an expo-file-system File and post with expo/fetch instead.
+  // Prefer a cache copy with a clean JPG/PNG name (same field as the website form).
+  // If that file is not accepted, retry once with a browser-style File(bytes, name, type).
+  // Classic `{ uri, name, type }` parts throw under Expo's WinterCG fetch.
   if (!uri) {
     throw new ApiError("Capture or choose a photo first.", 0, null);
   }
@@ -194,9 +218,9 @@ export async function classifyIncident(token, { uri, name, notes, locationText, 
     );
   }
 
-  const buildForm = async () => {
+  const buildForm = (imagePart) => {
     const form = new FormData();
-    form.append("image", await imageFileForUpload(File, Paths, uri, name));
+    form.append("image", imagePart);
     if (notes) form.append("notes", notes);
     if (locationText) form.append("location_text", locationText);
     if (latitude != null && latitude !== "") form.append("latitude", String(latitude));
@@ -204,13 +228,25 @@ export async function classifyIncident(token, { uri, name, notes, locationText, 
     return form;
   };
 
+  const send = (authToken, imagePart) => postClassify(expoFetch, buildForm(imagePart), authToken);
+
+  const sendWithFallback = async (authToken) => {
+    try {
+      return await send(authToken, await imageFileForUpload(File, Paths, uri, name));
+    } catch (err) {
+      const missingImage = err instanceof ApiError && err.status === 400;
+      if (!missingImage) throw err;
+      return send(authToken, await webStyleImagePart(expoFetch, uri, name));
+    }
+  };
+
   try {
-    return await postClassify(expoFetch, await buildForm(), token);
+    return await sendWithFallback(token);
   } catch (err) {
     // Stale app token or Dev Tunnel reacting to auth headers: guest classify is allowed.
     if (err instanceof ApiError && err.status === 401 && token) {
       try {
-        return await postClassify(expoFetch, await buildForm(), null);
+        return await sendWithFallback(null);
       } catch (retryErr) {
         if (retryErr instanceof ApiError) throw retryErr;
         throw new ApiError(networkHint(retryErr), 0, null);

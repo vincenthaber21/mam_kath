@@ -8,6 +8,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -44,6 +45,19 @@ def read_and_validate(upload):
         )
     data = upload.read()
     return data, open_image(data)
+
+
+_NAME_SAFE = re.compile(r"[^\w.\-]+")
+_IMAGE_EXT = re.compile(r"\.(jpe?g|png)$", re.IGNORECASE)
+
+
+def stored_image_name(upload_name, image_format):
+    """Safe JPG/PNG filename for the incident photo, matching the website upload."""
+    base = os.path.basename(str(upload_name or ""))
+    base = _NAME_SAFE.sub("_", base).strip("._")[:80]
+    stem = _IMAGE_EXT.sub("", base) or "incident"
+    ext = "png" if str(image_format or "").upper() == "PNG" else "jpg"
+    return f"{stem}.{ext}"
 
 
 def open_image(data):
@@ -365,7 +379,8 @@ def classify_upload(
         return rec
 
     rec.width, rec.height = img.size
-    rec.image.save(upload.name, ContentFile(data), save=False)
+    # Store the validated bytes under a JPG/PNG name (same ImageField path as the website).
+    rec.image.save(stored_image_name(getattr(upload, "name", ""), img.format), ContentFile(data), save=False)
     metas = models_in_use(sync=True)
     rec.selection_mode = selection_mode()
     meta = metas[0]

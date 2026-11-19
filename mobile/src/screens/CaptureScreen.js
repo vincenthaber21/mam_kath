@@ -15,8 +15,8 @@ import {
   View,
 } from "react-native";
 
-import { classifyIncident } from "../api";
 import { useAuth } from "../AuthContext";
+import { fastSubmitReport } from "../fastReport";
 import { barangayOptions, normalizeBarangay, resolveBarangayFromGps } from "../barangays";
 import { colors, spacing } from "../theme";
 
@@ -36,6 +36,7 @@ export default function CaptureScreen({ navigation }) {
   const [gpsBarangay, setGpsBarangay] = useState("");
   const [gpsStatus, setGpsStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState("");
   const [locBusy, setLocBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -156,6 +157,7 @@ export default function CaptureScreen({ navigation }) {
       return;
     }
     setBusy(true);
+    setStage("classifying");
     setError("");
     try {
       // Prefer an already-attached fix; otherwise grab GPS once so the report can pin on the map.
@@ -173,15 +175,17 @@ export default function CaptureScreen({ navigation }) {
         }
       }
 
-      const result = await classifyIncident(token, {
-        uri: photo.uri,
-        name: photo.name,
-        type: photo.type,
-        notes,
-        locationText: normalizeBarangay(submitBarangay),
-        latitude: submitCoords?.latitude,
-        longitude: submitCoords?.longitude,
-      });
+      const result = await fastSubmitReport(
+        token,
+        {
+          photo,
+          notes,
+          locationText: submitBarangay,
+          latitude: submitCoords?.latitude,
+          longitude: submitCoords?.longitude,
+        },
+        { onStage: setStage },
+      );
       const localImageUri = photo.uri;
       setPhoto(null);
       setNotes("");
@@ -202,12 +206,19 @@ export default function CaptureScreen({ navigation }) {
       setError(err.message || "Report failed. Please try again.");
     } finally {
       setBusy(false);
+      setStage("");
     }
   }
 
+  const stageHint =
+    stage === "classifying"
+      ? "Classifying the photo, then saving the report…"
+      : "Classifies the photo first, then saves the report and image.";
+
   return (
+    <View style={styles.root}>
     <ScrollView
-      style={styles.root}
+      style={styles.scroll}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
@@ -216,7 +227,7 @@ export default function CaptureScreen({ navigation }) {
         <Text style={styles.kicker}>Incident report</Text>
         <Text style={styles.heading}>Capture & submit</Text>
         <Text style={styles.lead}>
-          Add a photo, then optionally note what happened and where.
+          Add a photo, then tap Fast submit. Notes and barangay are optional.
         </Text>
       </View>
 
@@ -358,29 +369,6 @@ export default function CaptureScreen({ navigation }) {
         </View>
       </View>
 
-      {error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.error}>{error}</Text>
-        </View>
-      ) : null}
-
-      <Pressable
-        style={[styles.primary, (!photo || busy) && styles.disabled]}
-        onPress={submit}
-        disabled={busy}
-        accessibilityRole="button"
-        accessibilityLabel="Submit report"
-      >
-        {busy ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryText}>Submit report</Text>
-        )}
-      </Pressable>
-      <Text style={styles.footerHint}>
-        Your photo will be classified automatically and added to Incidents.
-      </Text>
-
       <Modal
         visible={pickerOpen}
         animationType="slide"
@@ -421,12 +409,36 @@ export default function CaptureScreen({ navigation }) {
         </View>
       </Modal>
     </ScrollView>
+
+    <View style={styles.submitBar}>
+      {error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.error}>{error}</Text>
+        </View>
+      ) : null}
+      <Pressable
+        style={[styles.primary, (!photo || busy) && styles.disabled]}
+        onPress={submit}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel="Fast submit report"
+      >
+        {busy ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.primaryText}>Fast submit</Text>
+        )}
+      </Pressable>
+      <Text style={styles.footerHint}>{stageHint}</Text>
+    </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, paddingBottom: 56 },
+  scroll: { flex: 1 },
+  content: { padding: spacing.lg, paddingBottom: spacing.lg },
 
   header: { marginBottom: spacing.lg },
   kicker: {
@@ -625,8 +637,15 @@ const styles = StyleSheet.create({
   },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
 
+  submitBar: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.bg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   primary: {
-    marginTop: spacing.sm,
     backgroundColor: colors.brand,
     borderRadius: 14,
     paddingVertical: 16,
@@ -639,7 +658,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     lineHeight: 17,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
 
   modalBackdrop: {
